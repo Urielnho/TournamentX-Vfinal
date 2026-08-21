@@ -242,7 +242,11 @@ export async function loadAppData(userId?: string): Promise<AppDatabaseData> {
     };
   });
 
-  const matches: Match[] = (matchResult.data ?? []).map((row: any) => ({
+  const matches: Match[] = (matchResult.data ?? []).map((row: any) => {
+    const matchRegistrationIds = [row.registration_a_id,row.registration_b_id].filter(Boolean);
+    const participantByOwner = registrations.some((registration:any)=>matchRegistrationIds.includes(registration.id)&&registration.user_id===userId);
+    const participantByRoster = rosterEntries.some((entry:any)=>matchRegistrationIds.includes(entry.registration_id)&&entry.user_id===userId);
+    return ({
     id: row.id,
     tournamentId: row.tournament_id,
     tournamentTitle: tournaments.find(tournament => tournament.id === row.tournament_id)?.title,
@@ -255,7 +259,9 @@ export async function loadAppData(userId?: string): Promise<AppDatabaseData> {
     date: row.scheduled_at || '',
     streamUrl: row.stream_url || undefined,
     bracketPosition: { round: Number(row.round_number || 1), matchIndex: Number(row.match_number || 1) },
-  }));
+    isUserManaged: Boolean(userId && tournaments.find(tournament=>tournament.id===row.tournament_id)?.organizerId===userId),
+    isUserParticipant: Boolean(userId && (participantByOwner||participantByRoster)),
+  }); });
 
   const transactions: Transaction[] = (transactionResult.data ?? []).map((row: any) => ({
     id: row.id,

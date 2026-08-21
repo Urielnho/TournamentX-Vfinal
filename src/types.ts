@@ -174,6 +174,8 @@ export interface Match {
   reportedByTeamA?: { scoreA: number; scoreB: number; evidence?: string };
   reportedByTeamB?: { scoreA: number; scoreB: number; evidence?: string };
   isConfirmedByOrganizer?: boolean;
+  isUserManaged?: boolean;
+  isUserParticipant?: boolean;
 }
 
 export interface PrizeBreakdownItem {
