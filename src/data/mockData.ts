@@ -216,7 +216,15 @@ export const GAMES_CATALOG = [
       "Cheats y Bots: prohibidos.",
       "Coaching durante el combate: prohibido.",
       "Las pausas reciben penalización según las reglas del torneo.",
-      "El abandono del combate cuenta como derrota."
+      "El abandono del combate cuenta como derrota.",
+      "Tiempo por ronda: 60 segundos.",
+      "Escenario: selección aleatoria.",
+      "Todos los personajes están permitidos.",
+      "Todos los Kameos están permitidos.",
+      "Personajes y Kameos DLC permitidos.",
+      "Plataforma: PC.",
+      "Crossplay activado.",
+      "El ganador mantiene personaje y Kameo; el perdedor puede cambiar personaje y/o Kameo."
     ]
   },
   {

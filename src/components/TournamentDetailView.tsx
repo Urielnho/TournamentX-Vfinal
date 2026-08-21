@@ -284,18 +284,6 @@ export const TournamentDetailView: React.FC<TournamentDetailViewProps> = ({
                 </> : <p className="rounded-xl bg-[#F9FAFB] p-4 text-xs font-semibold text-gray-600">Las inscripciones terminaron. Este torneo está disponible solo para seguimiento.</p>}
                 </div>
               </div>
-              {tournament.game === 'Mortal Kombat 1' && tournament.gameConfig && <div className="bg-white p-6 rounded-3xl border border-[#E5E7EB] space-y-4 shadow-xs lg:col-span-3">
-                <h3 className="text-base font-extrabold">Configuración de Mortal Kombat 1</h3>
-                <div className="grid grid-cols-1 gap-3 text-xs sm:grid-cols-2 lg:grid-cols-3">
-                  <div className="rounded-2xl bg-[#F9FAFB] p-3"><b>Ronda:</b> {tournament.gameConfig.roundTimeSeconds} segundos</div>
-                  <div className="rounded-2xl bg-[#F9FAFB] p-3"><b>Escenario:</b> {tournament.gameConfig.stageSelection === 'random' ? 'Aleatorio' : 'Selección manual'}</div>
-                  <div className="rounded-2xl bg-[#F9FAFB] p-3"><b>DLC:</b> {tournament.gameConfig.dlcAllowed ? 'Permitido' : 'No permitido'}</div>
-                  <div className="rounded-2xl bg-[#F9FAFB] p-3"><b>Personajes:</b> {tournament.gameConfig.characterPolicy === 'all' ? 'Todos permitidos' : `Restringidos: ${tournament.gameConfig.restrictedCharacters.join(', ')}`}</div>
-                  <div className="rounded-2xl bg-[#F9FAFB] p-3"><b>Kameos:</b> {tournament.gameConfig.kameoPolicy === 'all' ? 'Todos permitidos' : `Restringidos: ${tournament.gameConfig.restrictedKameos.join(', ')}`}</div>
-                  <div className="rounded-2xl bg-[#F9FAFB] p-3"><b>Plataforma:</b> {tournament.gameConfig.platform} · Crossplay {tournament.gameConfig.crossplay ? 'activado' : 'desactivado'}</div>
-                </div>
-                <div className="rounded-2xl border border-[#E5E7EB] p-4 text-xs text-gray-700"><p><b>Ganador:</b> mantiene personaje y Kameo.</p><p className="mt-1"><b>Perdedor:</b> puede cambiar personaje y/o Kameo.</p></div>
-              </div>}
             </div>
         )}
 

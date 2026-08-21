@@ -42,8 +42,6 @@ export const CreateTournamentWizard: React.FC<CreateTournamentWizardProps> = ({
     loserCharacterRule: 'may_change_character_and_or_kameo',
     platform: 'PC', crossplay: true,
   });
-  const [restrictedCharactersText, setRestrictedCharactersText] = useState('');
-  const [restrictedKameosText, setRestrictedKameosText] = useState('');
   
   // Ubicación
   const [locationType, setLocationType] = useState<'online' | 'onsite'>('online');
@@ -157,8 +155,6 @@ export const CreateTournamentWizard: React.FC<CreateTournamentWizardProps> = ({
     else if (step === 1 && hasStream && !streamUrl.trim()) error = 'Agrega el enlace de la transmisión o desactiva esta opción.';
     else if (step === 2 && locationType === 'online' && (!onlinePlatform.trim() || !onlineServer.trim() || !onlineRegion.trim())) error = 'Indica la plataforma, región y servidor del torneo en línea.';
     else if (step === 2 && locationType === 'onsite' && (!venueCity.trim() || !venueName.trim() || !venueAddress.trim())) error = 'Indica la ciudad, el recinto y la dirección del torneo presencial.';
-    else if (step === 2 && selectedGameId === 'mortalkombat' && mkConfig.characterPolicy === 'restricted' && !restrictedCharactersText.trim()) error = 'Indica qué personajes estarán restringidos.';
-    else if (step === 2 && selectedGameId === 'mortalkombat' && mkConfig.kameoPolicy === 'restricted' && !restrictedKameosText.trim()) error = 'Indica qué Kameos estarán restringidos.';
     else if (step === 3 && (!startDate || !endDate || !registrationDeadline)) error = 'Completa las fechas del torneo y de inscripción.';
     else if (step === 3 && new Date(endDate) <= new Date(startDate)) error = 'La fecha de finalización debe ser posterior al inicio.';
     else if (step === 3 && new Date(registrationDeadline) > new Date(startDate)) error = 'El cierre de inscripciones no puede ser posterior al inicio.';
@@ -186,8 +182,8 @@ export const CreateTournamentWizard: React.FC<CreateTournamentWizardProps> = ({
       gameMode: gameMode,
       gameConfig: selectedGameId === 'mortalkombat' ? {
         ...mkConfig,
-        restrictedCharacters: mkConfig.characterPolicy === 'restricted' ? restrictedCharactersText.split(',').map(value => value.trim()).filter(Boolean) : [],
-        restrictedKameos: mkConfig.kameoPolicy === 'restricted' ? restrictedKameosText.split(',').map(value => value.trim()).filter(Boolean) : [],
+        restrictedCharacters: [],
+        restrictedKameos: [],
       } : undefined,
       category: category,
       format: format,
@@ -554,43 +550,16 @@ export const CreateTournamentWizard: React.FC<CreateTournamentWizardProps> = ({
             {selectedGameId === 'mortalkombat' && (
               <div className="space-y-4 rounded-3xl border border-[#E5E7EB] bg-[#F9FAFB] p-5">
                 <div>
-                  <h3 className="text-sm font-black text-black">Configuración de Mortal Kombat 1</h3>
-                  <p className="text-[11px] text-gray-500">Individual 1v1 · 2 jugadores por partida. Doble eliminación es el formato recomendado.</p>
+                  <h3 className="text-sm font-black text-black">Formato de partida de Mortal Kombat 1</h3>
+                  <p className="text-[11px] text-gray-500">Individual 1v1 · 2 jugadores por partida. Las demás condiciones se eligen como reglas en el siguiente paso.</p>
                 </div>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <label className="space-y-1 text-[10px] font-bold uppercase text-gray-600">Fase inicial
                     <select value={mkConfig.initialSetFormat} onChange={e => setMkConfig({...mkConfig, initialSetFormat: e.target.value as MortalKombatConfig['initialSetFormat']})} className="w-full rounded-xl border border-[#E5E7EB] bg-white p-3 text-xs normal-case text-black"><option value="bo1">Best of 1</option><option value="bo3">Best of 3</option><option value="bo5">Best of 5</option></select>
                   </label>
                   <label className="space-y-1 text-[10px] font-bold uppercase text-gray-600">Fase final
                     <select value={mkConfig.finalSetFormat} onChange={e => setMkConfig({...mkConfig, finalSetFormat: e.target.value as MortalKombatConfig['finalSetFormat']})} className="w-full rounded-xl border border-[#E5E7EB] bg-white p-3 text-xs normal-case text-black"><option value="bo1">Best of 1</option><option value="bo3">Best of 3</option><option value="bo5">Best of 5</option></select>
                   </label>
-                  <label className="space-y-1 text-[10px] font-bold uppercase text-gray-600">Tiempo por ronda
-                    <input type="number" min={30} max={300} value={mkConfig.roundTimeSeconds} onChange={e => setMkConfig({...mkConfig, roundTimeSeconds: Math.max(30, Number(e.target.value))})} className="w-full rounded-xl border border-[#E5E7EB] bg-white p-3 text-xs normal-case text-black" />
-                  </label>
-                  <label className="space-y-1 text-[10px] font-bold uppercase text-gray-600">Escenario
-                    <select value={mkConfig.stageSelection} onChange={e => setMkConfig({...mkConfig, stageSelection: e.target.value as MortalKombatConfig['stageSelection']})} className="w-full rounded-xl border border-[#E5E7EB] bg-white p-3 text-xs normal-case text-black"><option value="random">Aleatorio</option><option value="manual">Selección manual</option></select>
-                  </label>
-                  <label className="space-y-1 text-[10px] font-bold uppercase text-gray-600">Personajes
-                    <select value={mkConfig.characterPolicy} onChange={e => setMkConfig({...mkConfig, characterPolicy: e.target.value as MortalKombatConfig['characterPolicy']})} className="w-full rounded-xl border border-[#E5E7EB] bg-white p-3 text-xs normal-case text-black"><option value="all">Todos permitidos</option><option value="restricted">Personajes restringidos</option></select>
-                  </label>
-                  <label className="space-y-1 text-[10px] font-bold uppercase text-gray-600">Kameos
-                    <select value={mkConfig.kameoPolicy} onChange={e => setMkConfig({...mkConfig, kameoPolicy: e.target.value as MortalKombatConfig['kameoPolicy']})} className="w-full rounded-xl border border-[#E5E7EB] bg-white p-3 text-xs normal-case text-black"><option value="all">Todos permitidos</option><option value="restricted">Kameos restringidos</option></select>
-                  </label>
-                  <label className="space-y-1 text-[10px] font-bold uppercase text-gray-600">DLC
-                    <select value={mkConfig.dlcAllowed ? 'yes' : 'no'} onChange={e => setMkConfig({...mkConfig, dlcAllowed: e.target.value === 'yes'})} className="w-full rounded-xl border border-[#E5E7EB] bg-white p-3 text-xs normal-case text-black"><option value="yes">Permitido</option><option value="no">No permitido</option></select>
-                  </label>
-                  <label className="space-y-1 text-[10px] font-bold uppercase text-gray-600">Plataforma
-                    <select value={mkConfig.platform} onChange={e => { const platform = e.target.value as MortalKombatConfig['platform']; setMkConfig({...mkConfig, platform}); setOnlinePlatform(platform); }} className="w-full rounded-xl border border-[#E5E7EB] bg-white p-3 text-xs normal-case text-black"><option>PC</option><option>PlayStation 5</option><option>Xbox Series X|S</option></select>
-                  </label>
-                  <label className="space-y-1 text-[10px] font-bold uppercase text-gray-600">Crossplay
-                    <select value={mkConfig.crossplay ? 'on' : 'off'} onChange={e => setMkConfig({...mkConfig, crossplay: e.target.value === 'on'})} className="w-full rounded-xl border border-[#E5E7EB] bg-white p-3 text-xs normal-case text-black"><option value="on">Activado</option><option value="off">Desactivado</option></select>
-                  </label>
-                </div>
-                {mkConfig.characterPolicy === 'restricted' && <input value={restrictedCharactersText} onChange={e => setRestrictedCharactersText(e.target.value)} placeholder="Personajes restringidos, separados por coma" className="w-full rounded-xl border border-[#E5E7EB] bg-white p-3 text-xs" />}
-                {mkConfig.kameoPolicy === 'restricted' && <input value={restrictedKameosText} onChange={e => setRestrictedKameosText(e.target.value)} placeholder="Kameos restringidos, separados por coma" className="w-full rounded-xl border border-[#E5E7EB] bg-white p-3 text-xs" />}
-                <div className="rounded-2xl border border-[#E5E7EB] bg-white p-4 text-xs text-gray-700">
-                  <p><b>Ganador:</b> mantiene personaje y Kameo.</p>
-                  <p className="mt-1"><b>Perdedor:</b> puede cambiar personaje y/o Kameo.</p>
                 </div>
               </div>
             )}
@@ -710,6 +679,15 @@ export const CreateTournamentWizard: React.FC<CreateTournamentWizardProps> = ({
                 <Shield className="w-3.5 h-3.5 text-black" />
                 <span>Reglas Oficiales del Torneo</span>
               </label>
+
+              {selectedGameId === 'mortalkombat' && <div className="rounded-2xl border border-[#E5E7EB] bg-[#F9FAFB] p-4">
+                <p className="text-xs font-black">Opciones sugeridas para MK1</p>
+                <p className="mt-1 text-[11px] text-gray-500">Selecciona las que aplicarán. Puedes activarlas o quitarlas con un clic.</p>
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">{selectedGame.defaultRules?.map(rule => {
+                  const selected = rules.includes(rule);
+                  return <button key={rule} type="button" onClick={() => setRules(current => selected ? current.filter(item => item !== rule) : [...current, rule])} className={`rounded-xl border p-3 text-left text-xs font-semibold ${selected ? 'border-black bg-black text-white' : 'border-[#E5E7EB] bg-white text-gray-600'}`}><span className="mr-2">{selected ? '✓' : '+'}</span>{rule}</button>;
+                })}</div>
+              </div>}
 
               <div className="space-y-2">
                 {rules.map((rule, idx) => (
