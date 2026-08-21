@@ -1,8 +1,29 @@
 import React, { useState } from 'react';
 import { Tournament, Match, Participant, ViewMode } from '../types';
-import { Shield, Trophy, Share2, Sparkles, X, Check, Users, Calendar, ArrowLeft, Clock } from 'lucide-react';
+import { Shield, Trophy, Share2, Sparkles, X, Check, Users, Calendar, ArrowLeft, Clock, Tv, ExternalLink } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { isRegistrationOpen, registrationClosedReason } from '../utils/tournamentAvailability';
+
+function getStreamPresentation(stream?: Tournament['stream']) {
+  if (!stream?.url) return null;
+  try {
+    const url = new URL(stream.url);
+    if (url.protocol !== 'https:') return null;
+    const host = url.hostname.toLowerCase().replace(/^www\./, '');
+    if (stream.platform === 'twitch' && host === 'twitch.tv') {
+      const channel = url.pathname.split('/').filter(Boolean)[0];
+      if (!channel || !/^[a-zA-Z0-9_]+$/.test(channel)) return { externalUrl: url.toString() };
+      const parent = window.location.hostname || 'localhost';
+      return { externalUrl: url.toString(), embedUrl: `https://player.twitch.tv/?channel=${encodeURIComponent(channel)}&parent=${encodeURIComponent(parent)}&autoplay=false` };
+    }
+    if (stream.platform === 'youtube' && (host === 'youtube.com' || host === 'youtu.be')) {
+      const videoId = host === 'youtu.be' ? url.pathname.split('/').filter(Boolean)[0] : url.searchParams.get('v') || url.pathname.match(/\/(?:live|embed)\/([^/?]+)/)?.[1];
+      if (!videoId || !/^[a-zA-Z0-9_-]+$/.test(videoId)) return { externalUrl: url.toString() };
+      return { externalUrl: url.toString(), embedUrl: `https://www.youtube.com/embed/${encodeURIComponent(videoId)}` };
+    }
+    return { externalUrl: url.toString() };
+  } catch { return null; }
+}
 
 interface TournamentDetailViewProps {
   tournament: Tournament;
@@ -58,6 +79,7 @@ export const TournamentDetailView: React.FC<TournamentDetailViewProps> = ({
   const tournamentMatches = matches.filter(m => m.tournamentId === tournament.id);
   const totalPrizePool = tournament.financials?.prizeAmount ?? tournament.basePrizePool;
   const registrationOpen = isRegistrationOpen(tournament);
+  const streamPresentation = getStreamPresentation(tournament.stream);
 
   const detailTabs = [
     { id: 'resumen', label: 'Resumen' },
@@ -198,6 +220,11 @@ export const TournamentDetailView: React.FC<TournamentDetailViewProps> = ({
                   {tournament.description}
                 </p>
               </div>
+
+              {tournament.stream && streamPresentation && <div className="overflow-hidden rounded-3xl border border-[#E5E7EB] bg-white shadow-xs">
+                <div className="flex flex-wrap items-center justify-between gap-3 p-5"><div className="flex items-center gap-3"><div className="rounded-xl bg-black p-2.5 text-white"><Tv className="h-5 w-5" /></div><div><h3 className="text-base font-extrabold">Transmisión oficial</h3><p className="text-xs text-gray-500">{tournament.stream.platform === 'twitch' ? 'Twitch' : 'YouTube'} · {tournament.stream.channelName || 'Canal oficial'}</p></div></div><a href={streamPresentation.externalUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 rounded-full border border-black px-4 py-2 text-xs font-bold">Abrir transmisión <ExternalLink className="h-3.5 w-3.5" /></a></div>
+                {streamPresentation.embedUrl ? <div className="aspect-video bg-black"><iframe src={streamPresentation.embedUrl} title={`Transmisión oficial de ${tournament.title}`} allowFullScreen allow="autoplay; fullscreen; picture-in-picture" className="h-full w-full border-0" /></div> : <div className="border-t bg-[#F9FAFB] p-5 text-xs text-gray-600">Este enlace no admite reproducción integrada, pero puedes abrir la transmisión en una pestaña nueva.</div>}
+              </div>}
 
               <div className="bg-white p-6 rounded-3xl border border-[#E5E7EB] space-y-4 shadow-xs">
                 <h3 className="text-base font-extrabold text-black">Formato de Competencia</h3>
