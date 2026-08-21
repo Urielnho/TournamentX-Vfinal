@@ -1,19 +1,17 @@
 import React, { useState } from 'react';
-import { Participant, Tournament, UserProfile, ViewMode } from '../types';
+import { Participant, UserProfile, ViewMode } from '../types';
 import { Plus, X, Search, Users, Trophy, Shield, Check } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 interface TeamsViewProps {
   participants: Participant[];
-  tournaments: Tournament[];
   currentUser: UserProfile;
   onNavigate: (view: ViewMode, tournamentId?: string) => void;
-  onCreateTeam: (tournamentId: string, name: string, tag: string, logoFile?: File) => Promise<void>;
+  onCreateTeam: (name: string, tag: string, logoFile?: File) => Promise<void>;
 }
 
 export const TeamsView: React.FC<TeamsViewProps> = ({
   participants,
-  tournaments,
   currentUser,
   onNavigate,
   onCreateTeam
@@ -24,7 +22,6 @@ export const TeamsView: React.FC<TeamsViewProps> = ({
   const [teamName, setTeamName] = useState('');
   const [teamTag, setTeamTag] = useState('');
   const [teamLogo, setTeamLogo] = useState<File | null>(null);
-  const [selectedTournamentId, setSelectedTournamentId] = useState('');
   const [createError, setCreateError] = useState('');
 
   const userTeams = participants.filter(team => team.captainId === currentUser.id || team.memberIds?.includes(currentUser.id));
@@ -38,10 +35,10 @@ export const TeamsView: React.FC<TeamsViewProps> = ({
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedTournamentId || !teamName.trim() || !teamTag.trim()) return;
+    if (!teamName.trim() || !teamTag.trim()) return;
     setCreateError('');
     try {
-      await onCreateTeam(selectedTournamentId, teamName.trim(), teamTag.toUpperCase(), teamLogo || undefined);
+      await onCreateTeam(teamName.trim(), teamTag.toUpperCase(), teamLogo || undefined);
       setShowCreateModal(false);
       setTeamName('');
       setTeamTag('');
@@ -146,10 +143,9 @@ export const TeamsView: React.FC<TeamsViewProps> = ({
             </button>
 
             <h3 className="text-lg font-extrabold text-black mb-1">Crear equipo temporal</h3>
-            <p className="text-xs text-gray-500 mb-4">Este equipo solo existirá dentro del torneo seleccionado.</p>
+            <p className="text-xs text-gray-500 mb-4">Podrás reutilizar este equipo e inscribir distintos rosters en varios torneos.</p>
 
             <form onSubmit={handleCreate} className="space-y-4 text-xs">
-              <div><label className="font-bold text-gray-600 uppercase block mb-1">Torneo</label><select required value={selectedTournamentId} onChange={event => setSelectedTournamentId(event.target.value)} className="w-full rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] px-3.5 py-2.5 outline-none"><option value="">Selecciona un torneo</option>{tournaments.filter(tournament => tournament.status === 'open' || tournament.status === 'upcoming').map(tournament => <option key={tournament.id} value={tournament.id}>{tournament.title}</option>)}</select></div>
               {createError && <p className="rounded-xl border border-red-200 bg-red-50 p-3 font-semibold text-red-700">{createError}</p>}
               <div>
                 <label className="font-bold text-gray-600 uppercase block mb-1">Nombre del Equipo</label>

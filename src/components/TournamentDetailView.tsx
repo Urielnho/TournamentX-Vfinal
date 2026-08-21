@@ -3,6 +3,7 @@ import { Tournament, Match, Participant, Team, UserProfile, ViewMode } from '../
 import { Shield, Trophy, Share2, Sparkles, X, Check, Users, Calendar, ArrowLeft, Clock, Tv, ExternalLink } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { isRegistrationOpen, registrationClosedReason } from '../utils/tournamentAvailability';
+import { getTeamRosterAvailability } from '../services/supabaseData';
 
 function getStreamPresentation(stream?: Tournament['stream']) {
   if (!stream?.url) return null;
@@ -41,7 +42,7 @@ interface TournamentDetailViewProps {
   teams: Team[];
   currentUser: UserProfile;
   onNavigate: (view: ViewMode, tournamentId?: string) => void;
-  onRegister: (tournamentId: string, teamName: string, ign: string, type: 'team' | 'individual', teamId?: string, logoFile?: File) => Promise<'payment_pending' | 'confirmed'>;
+  onRegister: (tournamentId: string, teamName: string, ign: string, type: 'team' | 'individual', teamId?: string, logoFile?: File, memberIds?: string[]) => Promise<'payment_pending' | 'confirmed'>;
 }
 
 export const TournamentDetailView: React.FC<TournamentDetailViewProps> = ({
@@ -62,6 +63,9 @@ export const TournamentDetailView: React.FC<TournamentDetailViewProps> = ({
   const [regTeamName, setRegTeamName] = useState('');
   const [selectedTeamId, setSelectedTeamId] = useState('new');
   const [regTeamLogo, setRegTeamLogo] = useState<File | null>(null);
+  const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>([]);
+  const [memberAvailability, setMemberAvailability] = useState<Record<string, boolean>>({});
+  const [loadingRoster, setLoadingRoster] = useState(false);
   const [registrationSuccess, setRegistrationSuccess] = useState(false);
   const [registrationError, setRegistrationError] = useState('');
 
@@ -72,7 +76,9 @@ export const TournamentDetailView: React.FC<TournamentDetailViewProps> = ({
     setRegistrationError('');
     try {
       const selectedTeam = teams.find(team => team.id === selectedTeamId);
-      const result = await onRegister(tournament.id, selectedTeam?.name || regTeamName, currentUser.gamerTag, regType, selectedTeam?.id, regTeamLogo || undefined);
+      const rosterIds = regType === 'team' ? (selectedTeam ? selectedMemberIds : [currentUser.id]) : [];
+      if (selectedTeam && rosterIds.length < tournament.minPlayersPerTeam) throw new Error(`Selecciona al menos ${tournament.minPlayersPerTeam} jugadores disponibles.`);
+      const result = await onRegister(tournament.id, selectedTeam?.name || regTeamName, currentUser.gamerTag, regType, selectedTeam?.id, regTeamLogo || undefined, rosterIds);
       if (result === 'payment_pending') { setShowRegisterModal(false); return; }
       setRegistrationSuccess(true);
       confetti({ particleCount: 50, spread: 50, origin: { y: 0.6 } });
@@ -94,7 +100,8 @@ export const TournamentDetailView: React.FC<TournamentDetailViewProps> = ({
   const totalPrizePool = tournament.financials?.prizeAmount ?? tournament.basePrizePool;
   const registrationOpen = isRegistrationOpen(tournament);
   const streamPresentation = getStreamPresentation(tournament.stream);
-  const captainTeams = teams.filter(team => team.tournamentId === tournament.id && team.captainId === currentUser.id);
+  const captainTeams = teams.filter(team => team.captainId === currentUser.id);
+  const selectedCaptainTeam = captainTeams.find(team => team.id === selectedTeamId);
 
   const detailTabs = [
     { id: 'resumen', label: 'Resumen' },
@@ -409,12 +416,13 @@ export const TournamentDetailView: React.FC<TournamentDetailViewProps> = ({
 
                 {regType === 'team' && (
                   <div className="space-y-3">
-                    {captainTeams.length > 0 && <div><label className="text-xs font-bold text-gray-500 uppercase block mb-1">Equipo que vas a inscribir</label><select value={selectedTeamId} onChange={event => setSelectedTeamId(event.target.value)} className="w-full rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] px-3.5 py-2.5 text-xs outline-none"><option value="new">Crear un equipo nuevo</option>{captainTeams.map(team => <option key={team.id} value={team.id}>{team.name} ({team.tag})</option>)}</select></div>}
+                    {captainTeams.length > 0 && <div><label className="text-xs font-bold text-gray-500 uppercase block mb-1">Equipo que vas a inscribir</label><select value={selectedTeamId} onChange={event => { const teamId = event.target.value; setSelectedTeamId(teamId); setMemberAvailability({}); if (teamId === 'new') { setSelectedMemberIds([]); return; } const team = captainTeams.find(item => item.id === teamId); setLoadingRoster(true); void getTeamRosterAvailability(teamId, tournament.id).then(availability => { setMemberAvailability(availability); setSelectedMemberIds(team?.members.filter(member => !availability[member.id]).map(member => member.id) || []); }).catch(error => setRegistrationError(error instanceof Error ? error.message : 'No se pudo comprobar el roster.')).finally(() => setLoadingRoster(false)); }} className="w-full rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] px-3.5 py-2.5 text-xs outline-none"><option value="new">Crear un equipo nuevo</option>{captainTeams.map(team => <option key={team.id} value={team.id}>{team.name} ({team.tag})</option>)}</select></div>}
                     {(captainTeams.length === 0 || selectedTeamId === 'new') && <div>
                       <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Nombre del Equipo</label>
                       <input type="text" required placeholder="Ej: Sentinels Latam" value={regTeamName} onChange={(e) => setRegTeamName(e.target.value)} className="w-full bg-[#F9FAFB] border border-[#E5E7EB] focus:border-black rounded-xl px-3.5 py-2.5 text-xs text-black outline-none" />
                     </div>}
                     {(captainTeams.length === 0 || selectedTeamId === 'new') && <label className="block cursor-pointer rounded-xl border border-dashed border-gray-300 bg-[#F9FAFB] p-3 text-xs text-gray-600 hover:border-black">{regTeamLogo ? `Logo seleccionado: ${regTeamLogo.name}` : 'Agregar logo del equipo (opcional) · JPG, PNG o WebP · máximo 2 MB'}<input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={event => setRegTeamLogo(event.target.files?.[0] || null)} /></label>}
+                    {selectedCaptainTeam && <div className="rounded-xl border border-gray-200 p-3"><p className="mb-2 text-xs font-black uppercase">Roster para este torneo ({selectedMemberIds.length} seleccionados)</p>{loadingRoster ? <p className="text-xs text-gray-500">Comprobando disponibilidad…</p> : <div className="space-y-2">{selectedCaptainTeam.members.map(member => { const unavailable = memberAvailability[member.id] ?? false; const isCaptain = member.id === selectedCaptainTeam.captainId; return <label key={member.id} className={`flex items-center justify-between gap-3 rounded-lg p-2 text-xs ${unavailable ? 'bg-red-50 text-red-700' : 'bg-gray-50'}`}><span><b>{member.gamerTag || member.name}</b>{isCaptain ? ' · Capitán' : ''}<small className="block font-normal">{unavailable ? 'Ya está inscrito en este torneo con otro equipo' : 'Disponible'}</small></span><input type="checkbox" disabled={unavailable || isCaptain} checked={selectedMemberIds.includes(member.id)} onChange={event => setSelectedMemberIds(previous => event.target.checked ? [...new Set([...previous, member.id])] : previous.filter(id => id !== member.id))} /></label>; })}</div>}<p className="mt-2 text-[11px] text-gray-500">El capitán siempre forma parte del roster. Puedes dejar fuera a otros miembros para esta inscripción.</p></div>}
                     <p className="rounded-xl border border-blue-200 bg-blue-50 p-3 text-xs text-blue-950">Solo puedes inscribir equipos donde eres capitán. Si el equipo gana, tú serás la persona responsable de recibir el premio.</p>
                   </div>
                 )}

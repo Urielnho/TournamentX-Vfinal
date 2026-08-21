@@ -16,7 +16,7 @@ Deno.serve(async request => {
   const userClient = createClient(supabaseUrl, anonKey, { global: { headers: { Authorization: authorization } } });
   const { data: authData } = await userClient.auth.getUser();
   if (!authData.user) return jsonResponse(request, { error: 'Inicia sesión para pagar la inscripción.' }, 401);
-  let payload: { tournamentId?: string; teamId?: string };
+  let payload: { tournamentId?: string; teamId?: string; memberIds?: string[] };
   try { payload = await request.json(); } catch { return jsonResponse(request, { error: 'Solicitud inválida.' }, 400); }
   if (!payload.tournamentId || !uuidPattern.test(payload.tournamentId) || (payload.teamId && !uuidPattern.test(payload.teamId))) return jsonResponse(request, { error: 'Datos de inscripción inválidos.' }, 400);
 
@@ -30,8 +30,16 @@ Deno.serve(async request => {
   if ((count || 0) >= tournament.max_participants) return jsonResponse(request, { error: 'El torneo ya no tiene cupos.' }, 409);
   if (tournament.participant_type === 'team') {
     if (!payload.teamId) return jsonResponse(request, { error: 'Selecciona un equipo.' }, 400);
-    const { data: team } = await admin.from('teams').select('id').eq('id', payload.teamId).eq('tournament_id', tournament.id).eq('captain_id', authData.user.id).maybeSingle();
+    const memberIds = [...new Set(payload.memberIds || [])];
+    if (!memberIds.includes(authData.user.id)) return jsonResponse(request, { error: 'El capitán debe formar parte del roster.' }, 400);
+    if (memberIds.length < Number(tournament.min_players_per_team || 1)) return jsonResponse(request, { error: `Selecciona al menos ${tournament.min_players_per_team} jugadores.` }, 400);
+    const { data: team } = await admin.from('teams').select('id').eq('id', payload.teamId).eq('captain_id', authData.user.id).maybeSingle();
     if (!team) return jsonResponse(request, { error: 'Solo el capitán puede pagar por este equipo.' }, 403);
+    const { data: validMembers } = await admin.from('team_members').select('user_id').eq('team_id', payload.teamId).in('user_id', memberIds);
+    if ((validMembers || []).length !== memberIds.length) return jsonResponse(request, { error: 'El roster contiene jugadores que no pertenecen al equipo.' }, 400);
+    const { data: occupiedRosters } = await admin.from('registration_members').select('user_id, registration:registrations!inner(tournament_id,status,team_id)').in('user_id', memberIds).eq('registration.tournament_id', tournament.id).not('registration.status', 'in', '(rejected,cancelled)');
+    const conflicts = (occupiedRosters || []).filter((entry: any) => entry.registration?.team_id !== payload.teamId);
+    if (conflicts.length) return jsonResponse(request, { error: 'Uno o más jugadores ya están inscritos en este torneo con otro equipo.' }, 409);
   } else if (payload.teamId) return jsonResponse(request, { error: 'La inscripción individual no acepta equipos.' }, 400);
 
   const { data: existing } = await admin.from('registrations').select('*').eq('tournament_id', tournament.id).eq('user_id', authData.user.id).not('status', 'in', '(rejected,cancelled)').maybeSingle();
@@ -42,6 +50,10 @@ Deno.serve(async request => {
     const inserted = await admin.from('registrations').insert({ tournament_id: tournament.id, user_id: authData.user.id, team_id: payload.teamId || null, status: 'pending', payment_status: 'pending' }).select('*').single();
     if (inserted.error) return jsonResponse(request, { error: 'No se pudo reservar la inscripción.' }, 400);
     registration = inserted.data;
+    if (payload.teamId) {
+      const rosterInsert = await admin.from('registration_members').insert((payload.memberIds || []).map(userId => ({ registration_id: registration.id, user_id: userId })));
+      if (rosterInsert.error) { await admin.from('registrations').delete().eq('id', registration.id); return jsonResponse(request, { error: rosterInsert.error.message }, 409); }
+    }
   }
   const amountMinor = Math.round(Number(tournament.entry_fee_amount) * 100);
   if (!Number.isSafeInteger(amountMinor) || amountMinor < 100 || amountMinor > 1_000_000_000) return jsonResponse(request, { error: 'Importe inválido.' }, 400);

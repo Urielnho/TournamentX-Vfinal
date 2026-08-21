@@ -33,6 +33,13 @@ export async function uploadTeamLogo(file: File): Promise<string> {
   return supabase.storage.from('tournament-media').getPublicUrl(path).data.publicUrl;
 }
 
+export async function getTeamRosterAvailability(teamId: string, tournamentId: string): Promise<Record<string, boolean>> {
+  if (!supabase) throw new Error('Supabase no está configurado.');
+  const { data, error } = await supabase.rpc('team_roster_availability', { target_team_id: teamId, target_tournament_id: tournamentId });
+  if (error) throw error;
+  return Object.fromEntries((data || []).map((row: { user_id: string; unavailable: boolean }) => [row.user_id, row.unavailable]));
+}
+
 export interface AppDatabaseData {
   tournaments: Tournament[];
   teams: Team[];
@@ -46,23 +53,25 @@ export interface AppDatabaseData {
 export async function loadAppData(userId?: string): Promise<AppDatabaseData> {
   if (!supabase) return { tournaments: [], teams: [], participants: [], matches: [], transactions: [], pendingApprovals: [], users: [] };
 
-  const [tournamentResult, teamResult, memberResult, registrationResult, matchResult, transactionResult, profileResult, countResult] = await Promise.all([
+  const [tournamentResult, teamResult, memberResult, registrationResult, rosterResult, matchResult, transactionResult, profileResult, countResult] = await Promise.all([
     supabase.from('tournaments').select('*, organizer:profiles!tournaments_organizer_id_fkey(full_name, avatar_url)').neq('status', 'draft').order('created_at', { ascending: false }),
     supabase.from('teams').select('*, captain:profiles!teams_captain_id_fkey(full_name, email)').order('created_at', { ascending: false }),
     supabase.from('team_members').select('team_id, user_id, member_role, joined_at, profile:profiles!team_members_user_id_fkey(full_name, gamer_tag, avatar_url)'),
     supabase.from('registrations').select('id, tournament_id, user_id, team_id, status, created_at'),
+    supabase.from('registration_members').select('registration_id, user_id, registration:registrations!registration_members_registration_id_fkey(tournament_id, status)'),
     supabase.from('matches').select('*, team_a:teams!matches_team_a_id_fkey(id, name, tag, logo_url), team_b:teams!matches_team_b_id_fkey(id, name, tag, logo_url)').order('scheduled_at', { ascending: true }),
     userId ? supabase.from('transactions').select('*, tournament:tournaments(title), profile:profiles(full_name)').order('created_at', { ascending: false }) : Promise.resolve({ data: [], error: null }),
     userId ? supabase.from('profiles').select('id, email, full_name, gamer_tag, avatar_url, global_role').order('created_at', { ascending: false }) : Promise.resolve({ data: [], error: null }),
     supabase.rpc('tournament_registration_counts'),
   ]);
 
-  const firstError = [tournamentResult, teamResult, memberResult, registrationResult, matchResult, transactionResult, profileResult, countResult].find(result => result.error)?.error;
+  const firstError = [tournamentResult, teamResult, memberResult, registrationResult, rosterResult, matchResult, transactionResult, profileResult, countResult].find(result => result.error)?.error;
   if (firstError) throw firstError;
 
   const registrations = registrationResult.data ?? [];
   const registrationCounts = countResult.data ?? [];
   const members = memberResult.data ?? [];
+  const rosterEntries = rosterResult.data ?? [];
   const financialResults = await Promise.all((tournamentResult.data ?? []).map((row: any) => supabase.rpc('tournament_financial_summary', { target_tournament_id: row.id })));
   const tournaments: Tournament[] = (tournamentResult.data ?? []).map((row: any) => {
     const tournamentRegistrations = registrations.filter((registration: any) => registration.tournament_id === row.id && !['rejected', 'cancelled'].includes(registration.status));
@@ -134,6 +143,7 @@ export async function loadAppData(userId?: string): Promise<AppDatabaseData> {
       avatar: member.profile?.avatar_url || undefined,
       role: member.member_role,
       joinedAt: member.joined_at,
+      registeredTournamentIds: rosterEntries.filter((entry: any) => entry.user_id === member.user_id && !['rejected', 'cancelled'].includes(entry.registration?.status)).map((entry: any) => entry.registration?.tournament_id).filter(Boolean),
     })),
     status: row.status,
     paymentStatus: row.payment_status,
@@ -149,7 +159,7 @@ export async function loadAppData(userId?: string): Promise<AppDatabaseData> {
       name: team.name,
       tag: team.tag,
       logo: team.logo,
-      membersCount: team.members.length,
+      membersCount: rosterEntries.filter((entry: any) => entry.registration_id === registration.id).length || team.members.length,
       captain: team.captainName,
       captainId: team.captainId,
       status: 'confirmed' as const,
@@ -307,17 +317,21 @@ export async function waitForOrganizerFunding(tournamentId: string) {
   throw new Error('Stripe recibió el pago, pero la publicación sigue en validación. Actualiza en unos momentos.');
 }
 
-export async function insertRegistration(tournamentId: string, userId: string, teamId?: string, status: 'pending' | 'confirmed' = 'confirmed') {
+export async function insertRegistration(tournamentId: string, _userId: string, teamId?: string, status: 'pending' | 'confirmed' = 'confirmed', memberIds: string[] = []) {
   if (!supabase) throw new Error('Supabase no está configurado.');
-  const { error } = await supabase.from('registrations').insert({ tournament_id: tournamentId, user_id: userId, team_id: teamId || null, status });
+  const { error } = await supabase.rpc('create_free_registration', { target_tournament_id: tournamentId, target_team_id: teamId || null, selected_member_ids: memberIds, requested_status: status });
   if (error) throw error;
 }
 
-export async function insertTeam(tournamentId: string, captainId: string, name: string, tag: string, logoUrl?: string) {
+export async function insertTeam(tournamentId: string | undefined, captainId: string, name: string, tag: string, logoUrl?: string) {
   if (!supabase) throw new Error('Supabase no está configurado.');
-  const { data, error } = await supabase.from('teams').insert({ tournament_id: tournamentId, captain_id: captainId, name, tag, logo_url: logoUrl || null, status: 'confirmed', payment_status: 'unpaid' }).select('id').single();
+  const { data, error } = await supabase.from('teams').insert({ tournament_id: tournamentId || null, captain_id: captainId, name, tag, logo_url: logoUrl || null, status: 'confirmed', payment_status: 'unpaid' }).select('id').single();
   if (error) throw error;
-  await supabase.from('team_members').insert({ team_id: data.id, user_id: captainId, member_role: 'captain' });
+  const { error: memberError } = await supabase.from('team_members').insert({ team_id: data.id, user_id: captainId, member_role: 'captain' });
+  if (memberError) {
+    await supabase.from('teams').delete().eq('id', data.id);
+    throw memberError;
+  }
   return data.id;
 }
 
@@ -338,9 +352,9 @@ export async function startPaidRegistration(tournamentId: string, teamId?: strin
   return await new Promise<never>(() => undefined);
 }
 
-export async function createRegistrationPaymentIntent(tournamentId: string, teamId?: string) {
+export async function createRegistrationPaymentIntent(tournamentId: string, teamId?: string, memberIds: string[] = []) {
   if (!supabase) throw new Error('Supabase no está configurado.');
-  const { data, error } = await supabase.functions.invoke('create-registration-payment-intent', { body: { tournamentId, teamId } });
+  const { data, error } = await supabase.functions.invoke('create-registration-payment-intent', { body: { tournamentId, teamId, memberIds } });
   if (error) {
     let message = error.message;
     try {

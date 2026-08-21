@@ -183,22 +183,22 @@ export default function App() {
     return { ...tournament, id, organizerId: authUser.id, organizer: { name: userProfile.name, avatar: userProfile.avatarUrl }, isUserOrganizing: true };
   };
 
-  const handleRegister = async (tournamentId: string, teamName: string, _ign: string, type: 'team' | 'individual', selectedTeamId?: string, logoFile?: File) => {
+  const handleRegister = async (tournamentId: string, teamName: string, _ign: string, type: 'team' | 'individual', selectedTeamId?: string, logoFile?: File, memberIds: string[] = []) => {
     if (!authUser) { setShowAuthModal(true); throw new Error('Inicia sesión para inscribirte.'); }
     const tournament = tournaments.find(item => item.id === tournamentId);
     if (!tournament) throw new Error('El torneo ya no está disponible.');
     if (tournament.organizerId === authUser.id) throw new Error('El organizador no puede participar en su propio torneo.');
     if (type !== tournament.participantType) throw new Error(tournament.participantType === 'individual' ? 'Este torneo solo acepta inscripciones individuales.' : 'Este torneo solo acepta inscripciones por equipo.');
-    const existingTeam = type === 'team' && selectedTeamId ? teams.find(team => team.id === selectedTeamId && team.tournamentId === tournamentId && team.captainId === authUser.id) : undefined;
+    const existingTeam = type === 'team' && selectedTeamId ? teams.find(team => team.id === selectedTeamId && team.captainId === authUser.id) : undefined;
     if (type === 'team' && selectedTeamId && !existingTeam) throw new Error('Solo el capitán puede inscribir este equipo.');
     const logoUrl = type === 'team' && !existingTeam && logoFile ? await uploadTeamLogo(logoFile) : undefined;
-    const teamId = type === 'team' ? existingTeam?.id || await insertTeam(tournamentId, authUser.id, teamName, teamName.slice(0, 5).toUpperCase(), logoUrl) : undefined;
+    const teamId = type === 'team' ? existingTeam?.id || await insertTeam(undefined, authUser.id, teamName, teamName.slice(0, 5).toUpperCase(), logoUrl) : undefined;
     if (tournament.entryFeeType !== 'free' && tournament.entryFeeAmount > 0) {
-      const payment = await createRegistrationPaymentIntent(tournamentId, teamId);
+      const payment = await createRegistrationPaymentIntent(tournamentId, teamId, memberIds.length > 0 ? memberIds : [authUser.id]);
       setRegistrationPayment({ ...payment, amount: tournament.entryFeeAmount, tournamentTitle: tournament.title });
       return 'payment_pending' as const;
     }
-    await insertRegistration(tournamentId, authUser.id, teamId, tournament?.accessType === 'private' ? 'pending' : 'confirmed');
+    await insertRegistration(tournamentId, authUser.id, teamId, tournament?.accessType === 'private' ? 'pending' : 'confirmed', type === 'team' ? (memberIds.length > 0 ? memberIds : [authUser.id]) : []);
     await refreshData(authUser.id);
     return 'confirmed' as const;
   };
@@ -211,10 +211,10 @@ export default function App() {
     await refreshData(authUser?.id);
   };
 
-  const handleCreateTeam = async (tournamentId: string, name: string, tag: string, logoFile?: File) => {
+  const handleCreateTeam = async (name: string, tag: string, logoFile?: File) => {
     if (!authUser) { setShowAuthModal(true); throw new Error('Inicia sesión para crear un equipo.'); }
     const logoUrl = logoFile ? await uploadTeamLogo(logoFile) : undefined;
-    await insertTeam(tournamentId, authUser.id, name, tag, logoUrl);
+    await insertTeam(undefined, authUser.id, name, tag, logoUrl);
     await refreshData(authUser.id);
   };
 
@@ -261,7 +261,7 @@ export default function App() {
       {currentView === 'create-tournament' && authUser && <CreateTournamentWizard onTournamentCreated={handleTournamentCreated} onTournamentPublished={async tournamentId => { await refreshData(authUser.id); setSelectedTournamentId(tournamentId); }} onNavigate={handleNavigate} />}
       {currentView === 'organizer-dashboard' && currentTournament?.isUserOrganizing && <OrganizerDashboardView activeTournamentId={currentTournament.id} activeSection={organizerSection} transactions={transactions.filter(transaction => transaction.tournamentId === currentTournament.id)} pendingApprovals={pendingApprovals.filter(item => item.tournamentId === currentTournament.id)} tournaments={tournaments.filter(t => t.isUserOrganizing)} matches={matches.filter(match => match.tournamentId === currentTournament.id)} participants={currentParticipants} onNavigate={handleNavigate} onSectionChange={section => handleNavigate('organizer-dashboard', currentTournament.id, section)} onApproveTeam={id => void approveTeam(id)} onRejectTeam={id => void rejectTeam(id)} onUpdateMatchScore={(id, a, b) => void updateScore(id, a, b)} onUpdateTournamentSettings={saveTournamentSettings} />}
       {currentView === 'profile' && authUser && <ProfileAthleteView user={userProfile} onUpdateUser={profile => void updateProfile(profile)} onNavigate={handleNavigate} />}
-      {currentView === 'teams' && <TeamsView participants={teamCards} tournaments={tournaments} currentUser={userProfile} onNavigate={handleNavigate} onCreateTeam={handleCreateTeam} />}
+      {currentView === 'teams' && <TeamsView participants={teamCards} currentUser={userProfile} onNavigate={handleNavigate} onCreateTeam={handleCreateTeam} />}
       {currentView === 'matches' && <MatchesView matches={matches} onNavigate={handleNavigate} />}
       {currentView === 'admin-panel' && userProfile.globalRole === 'admin' && <AdminDashboardView tournaments={tournaments} teams={teams} transactions={transactions} users={users} currentUser={userProfile} onNavigate={handleNavigate} onDeleteTournament={deleteTournament} onUpdateUserStatus={() => undefined} onDeleteUser={() => undefined} onDeleteTeam={deleteTeam} />}
     </main>

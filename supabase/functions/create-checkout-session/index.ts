@@ -21,7 +21,7 @@ Deno.serve(async request => {
   const { data: authData, error: authError } = await userClient.auth.getUser();
   if (authError || !authData.user?.email) return jsonResponse(request, { error: 'Inicia sesión para pagar una inscripción.' }, 401);
 
-  let payload: { tournamentId?: string; teamId?: string };
+  let payload: { tournamentId?: string; teamId?: string; memberIds?: string[] };
   try { payload = await request.json(); } catch { return jsonResponse(request, { error: 'Solicitud inválida.' }, 400); }
   if (!payload.tournamentId || !uuidPattern.test(payload.tournamentId)) return jsonResponse(request, { error: 'Torneo inválido.' }, 400);
   if (payload.teamId && !uuidPattern.test(payload.teamId)) return jsonResponse(request, { error: 'Equipo inválido.' }, 400);
@@ -38,7 +38,7 @@ Deno.serve(async request => {
 
   if (tournament.participant_type === 'team') {
     if (!payload.teamId) return jsonResponse(request, { error: 'Selecciona un equipo válido.' }, 400);
-    const { data: team } = await admin.from('teams').select('id').eq('id', payload.teamId).eq('tournament_id', tournament.id).eq('captain_id', authData.user.id).maybeSingle();
+    const { data: team } = await admin.from('teams').select('id').eq('id', payload.teamId).eq('captain_id', authData.user.id).maybeSingle();
     if (!team) return jsonResponse(request, { error: 'Solo el capitán puede pagar por este equipo.' }, 403);
   } else if (payload.teamId) {
     return jsonResponse(request, { error: 'La inscripción individual no acepta equipos.' }, 400);

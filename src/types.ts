@@ -90,6 +90,7 @@ export interface TeamMember {
   avatar?: string;
   role: 'captain' | 'starter' | 'substitute';
   joinedAt: string;
+  registeredTournamentIds?: string[];
 }
 
 export interface Team {
