@@ -85,6 +85,25 @@ export const respondTeamJoinRequest = (requestId: string, approve: boolean) => t
 export const removeTeamMember = (teamId: string, userId: string) => teamRpc('remove_team_member', { target_team_id: teamId, target_user_id: userId });
 export const leaveTeam = (teamId: string) => teamRpc('leave_team', { target_team_id: teamId });
 
+export async function generateTournamentBracket(tournamentId: string): Promise<number> {
+  if (!supabase) throw new Error('Supabase no está configurado.');
+  const { data, error } = await supabase.rpc('generate_initial_bracket', { target_tournament_id: tournamentId });
+  if (error) throw error;
+  return Number(data || 0);
+}
+
+export async function clearTournamentBracket(tournamentId: string) {
+  if (!supabase) throw new Error('Supabase no está configurado.');
+  const { error } = await supabase.from('matches').delete().eq('tournament_id', tournamentId);
+  if (error) throw error;
+}
+
+export async function updateMatchSchedule(matchId: string, scheduledAt: string, streamUrl?: string) {
+  if (!supabase) throw new Error('Supabase no está configurado.');
+  const { error } = await supabase.from('matches').update({ scheduled_at: scheduledAt || null, stream_url: streamUrl || null }).eq('id', matchId);
+  if (error) throw error;
+}
+
 export async function loadAppData(userId?: string): Promise<AppDatabaseData> {
   if (!supabase) return { tournaments: [], teams: [], participants: [], matches: [], transactions: [], pendingApprovals: [], users: [] };
 
@@ -94,7 +113,7 @@ export async function loadAppData(userId?: string): Promise<AppDatabaseData> {
     supabase.from('team_members').select('team_id, user_id, member_role, joined_at, profile:profiles!team_members_user_id_fkey(full_name, gamer_tag, avatar_url)'),
     supabase.from('registrations').select('id, tournament_id, user_id, team_id, status, created_at'),
     supabase.from('registration_members').select('registration_id, user_id, registration:registrations!registration_members_registration_id_fkey(tournament_id, status)'),
-    supabase.from('matches').select('*, team_a:teams!matches_team_a_id_fkey(id, name, tag, logo_url), team_b:teams!matches_team_b_id_fkey(id, name, tag, logo_url)').order('scheduled_at', { ascending: true }),
+    supabase.from('matches').select('*, team_a:teams!matches_team_a_id_fkey(id, name, tag, logo_url), team_b:teams!matches_team_b_id_fkey(id, name, tag, logo_url), registration_a:registrations!matches_registration_a_id_fkey(id,profile:profiles!registrations_user_id_fkey(full_name,gamer_tag,avatar_url)), registration_b:registrations!matches_registration_b_id_fkey(id,profile:profiles!registrations_user_id_fkey(full_name,gamer_tag,avatar_url))').order('round_number', { ascending: true }).order('match_number', { ascending: true }),
     userId ? supabase.from('transactions').select('*, tournament:tournaments(title), profile:profiles(full_name)').order('created_at', { ascending: false }) : Promise.resolve({ data: [], error: null }),
     userId ? supabase.from('profiles').select('id, email, full_name, gamer_tag, avatar_url, global_role').order('created_at', { ascending: false }) : Promise.resolve({ data: [], error: null }),
     supabase.rpc('tournament_registration_counts'),
@@ -216,13 +235,14 @@ export async function loadAppData(userId?: string): Promise<AppDatabaseData> {
     tournamentId: row.tournament_id,
     tournamentTitle: tournaments.find(tournament => tournament.id === row.tournament_id)?.title,
     roundName: row.round_name,
-    teamA: { id: row.team_a?.id || '', name: row.team_a?.name || 'Por definir', tag: row.team_a?.tag || 'TBD', logo: row.team_a?.logo_url || undefined, score: row.score_a, isWinner: row.status === 'finished' && row.score_a > row.score_b },
-    teamB: { id: row.team_b?.id || '', name: row.team_b?.name || 'Por definir', tag: row.team_b?.tag || 'TBD', logo: row.team_b?.logo_url || undefined, score: row.score_b, isWinner: row.status === 'finished' && row.score_b > row.score_a },
+    teamA: { id: row.team_a?.id || row.registration_a?.id || '', name: row.team_a?.name || row.registration_a?.profile?.gamer_tag || row.registration_a?.profile?.full_name || 'Por definir', tag: row.team_a?.tag || 'JUG', logo: row.team_a?.logo_url || row.registration_a?.profile?.avatar_url || undefined, score: row.score_a, isWinner: row.status === 'finished' && row.score_a > row.score_b },
+    teamB: { id: row.team_b?.id || row.registration_b?.id || '', name: row.team_b?.name || row.registration_b?.profile?.gamer_tag || row.registration_b?.profile?.full_name || (row.registration_a ? 'BYE' : 'Por definir'), tag: row.team_b?.tag || 'JUG', logo: row.team_b?.logo_url || row.registration_b?.profile?.avatar_url || undefined, score: row.score_b, isWinner: row.status === 'finished' && row.score_b > row.score_a },
     status: row.status,
     game: tournaments.find(tournament => tournament.id === row.tournament_id)?.game || '',
     time: row.scheduled_at ? new Date(row.scheduled_at).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }) : 'Por definir',
     date: row.scheduled_at || '',
     streamUrl: row.stream_url || undefined,
+    bracketPosition: { round: Number(row.round_number || 1), matchIndex: Number(row.match_number || 1) },
   }));
 
   const transactions: Transaction[] = (transactionResult.data ?? []).map((row: any) => ({

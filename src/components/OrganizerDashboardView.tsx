@@ -40,6 +40,9 @@ interface OrganizerDashboardViewProps {
   onApproveTeam: (id: string, teamName: string) => void;
   onRejectTeam: (id: string) => void;
   onUpdateMatchScore?: (matchId: string, scoreA: number, scoreB: number, winnerId?: string) => void;
+  onGenerateBracket: (tournamentId: string) => Promise<number>;
+  onClearBracket: (tournamentId: string) => Promise<void>;
+  onScheduleMatch: (matchId: string, scheduledAt: string, streamUrl?: string) => Promise<void>;
   onUpdateTournamentSettings: (tournamentId: string, settings: { title: string; description: string; bannerUrl: string; stream?: Tournament['stream']; organizerPercentage: number; status: Tournament['status'] }) => Promise<void>;
 }
 
@@ -56,6 +59,9 @@ export const OrganizerDashboardView: React.FC<OrganizerDashboardViewProps> = ({
   onApproveTeam,
   onRejectTeam,
   onUpdateMatchScore,
+  onGenerateBracket,
+  onClearBracket,
+  onScheduleMatch,
   onUpdateTournamentSettings,
 }) => {
   const activeSidebarItem = activeSection;
@@ -63,6 +69,8 @@ export const OrganizerDashboardView: React.FC<OrganizerDashboardViewProps> = ({
   const [searchTx, setSearchTx] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'PAID' | 'PENDING'>('ALL');
   const [actionSuccessMessage, setActionSuccessMessage] = useState<string | null>(null);
+  const [actionError, setActionError] = useState('');
+  const [isGeneratingBracket, setIsGeneratingBracket] = useState(false);
 
   // Manual Add Team state
   const [showAddTeamModal, setShowAddTeamModal] = useState(false);
@@ -74,6 +82,9 @@ export const OrganizerDashboardView: React.FC<OrganizerDashboardViewProps> = ({
   const [editingMatchId, setEditingMatchId] = useState<string | null>(null);
   const [editScoreA, setEditScoreA] = useState<number>(0);
   const [editScoreB, setEditScoreB] = useState<number>(0);
+  const [editingScheduleId, setEditingScheduleId] = useState<string | null>(null);
+  const [scheduleDate, setScheduleDate] = useState('');
+  const [scheduleStream, setScheduleStream] = useState('');
 
   // Tournament settings editable state
   const currentTourn = tournaments.find(t => t.id === activeTournamentId) || tournaments[0];
@@ -178,6 +189,27 @@ export const OrganizerDashboardView: React.FC<OrganizerDashboardViewProps> = ({
       setTimeout(() => setActionSuccessMessage(null), 3000);
     } catch (error) { setSettingsError(error instanceof Error ? error.message : 'No se pudo guardar la configuración.'); }
     finally { setIsSavingSettings(false); }
+  };
+
+  const handleGenerateBracket = async () => {
+    setActionError(''); setIsGeneratingBracket(true);
+    try { const count = await onGenerateBracket(activeTournamentId); setActionSuccessMessage(`Bracket generado con ${count} partidos reales.`); }
+    catch (error) { setActionError(error instanceof Error ? error.message : 'No se pudo generar el bracket.'); }
+    finally { setIsGeneratingBracket(false); }
+  };
+
+  const handleClearBracket = async () => {
+    if (!window.confirm('¿Eliminar todos los partidos de esta llave? Esta acción no se puede deshacer.')) return;
+    setActionError('');
+    try { await onClearBracket(activeTournamentId); setActionSuccessMessage('Bracket eliminado. Ya puedes generar uno nuevo.'); }
+    catch (error) { setActionError(error instanceof Error ? error.message : 'No se pudo eliminar el bracket.'); }
+  };
+
+  const handleSaveSchedule = async (matchId: string) => {
+    if (!scheduleDate) return setActionError('Selecciona la fecha y hora del partido.');
+    setActionError('');
+    try { await onScheduleMatch(matchId, scheduleDate, scheduleStream); setEditingScheduleId(null); setActionSuccessMessage('Horario del partido actualizado.'); }
+    catch (error) { setActionError(error instanceof Error ? error.message : 'No se pudo programar el partido.'); }
   };
 
   const handleBannerFile = async (file?: File) => {
@@ -322,6 +354,7 @@ export const OrganizerDashboardView: React.FC<OrganizerDashboardViewProps> = ({
             <button onClick={() => setActionSuccessMessage(null)} className="text-gray-400 hover:text-white text-xs">✕</button>
           </div>
         )}
+        {actionError && <div className="rounded-2xl border border-red-200 bg-red-50 p-3.5 text-xs font-bold text-red-700">{actionError}</div>}
 
         {/* TAB 1: RESUMEN GENERAL */}
         {activeSidebarItem === 'resumen' && (
@@ -593,12 +626,13 @@ export const OrganizerDashboardView: React.FC<OrganizerDashboardViewProps> = ({
         {/* TAB 4: GESTIÓN DE PARTIDOS */}
         {activeSidebarItem === 'partidos' && (
           <div className="bg-white p-6 rounded-3xl border border-[#E5E7EB] space-y-4 shadow-xs">
-            <div>
-              <h3 className="text-sm font-extrabold text-black">Gestionar Resultados y Marcadores</h3>
-              <p className="text-xs text-gray-500">Actualiza los marcadores de las series para avanzar en el bracket.</p>
+            <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+              <div><h3 className="text-sm font-extrabold text-black">Organizar Partidos y Bracket</h3><p className="text-xs text-gray-500">Genera cruces únicamente con inscripciones confirmadas, programa horarios y captura resultados.</p></div>
+              <div className="flex gap-2">{matches.length === 0 ? <button onClick={() => void handleGenerateBracket()} disabled={isGeneratingBracket || participants.length < 2} className="rounded-full bg-black px-4 py-2 text-xs font-bold text-white disabled:opacity-40">{isGeneratingBracket ? 'Generando…' : 'Generar bracket'}</button> : <button onClick={() => void handleClearBracket()} className="rounded-full border border-red-200 px-4 py-2 text-xs font-bold text-red-700">Regenerar llave</button>}</div>
             </div>
 
             <div className="space-y-3">
+              {matches.length === 0 && <div className="rounded-2xl border border-dashed border-gray-300 bg-gray-50 p-8 text-center text-xs text-gray-600">{participants.length < 2 ? 'Necesitas al menos dos participantes confirmados para generar la llave.' : 'Todavía no hay partidos. Genera el bracket cuando estén listas las inscripciones.'}</div>}
               {matches.map((m) => (
                 <div key={m.id} className="p-4 bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4 text-xs">
                   <div>
@@ -611,6 +645,8 @@ export const OrganizerDashboardView: React.FC<OrganizerDashboardViewProps> = ({
                     <span className="font-bold text-black text-sm">{m.teamA.name} vs {m.teamB.name}</span>
                   </div>
 
+                  <div className="flex flex-col items-end gap-2">
+                  {editingScheduleId === m.id && <div className="flex flex-wrap items-center gap-2 rounded-xl border bg-white p-2"><input type="datetime-local" value={scheduleDate} onChange={e=>setScheduleDate(e.target.value)} className="rounded-lg border p-1.5 text-xs"/><input type="url" value={scheduleStream} onChange={e=>setScheduleStream(e.target.value)} placeholder="Stream HTTPS (opcional)" className="rounded-lg border p-1.5 text-xs"/><button onClick={()=>void handleSaveSchedule(m.id)} className="rounded-lg bg-black px-3 py-1.5 font-bold text-white">Guardar horario</button></div>}
                   {editingMatchId === m.id ? (
                     <div className="flex items-center gap-3 bg-white p-2 rounded-2xl border border-[#E5E7EB]">
                       <div className="flex items-center gap-1.5">
@@ -646,7 +682,7 @@ export const OrganizerDashboardView: React.FC<OrganizerDashboardViewProps> = ({
                       </button>
                     </div>
                   ) : (
-                    <div className="flex items-center gap-4">
+                    <div className="flex flex-wrap items-center justify-end gap-3">
                       <div className="text-sm font-black text-black">
                         {m.teamA.score} - {m.teamB.score}
                       </div>
@@ -661,8 +697,10 @@ export const OrganizerDashboardView: React.FC<OrganizerDashboardViewProps> = ({
                         <Edit2 className="w-3 h-3" />
                         <span>Editar Marcador</span>
                       </button>
+                      <button onClick={() => { setEditingScheduleId(m.id); setScheduleDate(m.date ? new Date(new Date(m.date).getTime() - new Date(m.date).getTimezoneOffset()*60000).toISOString().slice(0,16) : ''); setScheduleStream(m.streamUrl || ''); }} className="rounded-full border px-3 py-1.5 text-xs font-bold">Programar</button>
                     </div>
                   )}
+                  </div>
                 </div>
               ))}
             </div>
