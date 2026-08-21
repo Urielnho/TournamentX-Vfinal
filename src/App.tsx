@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { User as SupabaseUser } from '@supabase/supabase-js';
 import { AdminUserSummary, Match, Participant, PendingApproval, Team, Tournament, Transaction, UserProfile, ViewMode } from './types';
 import { Navbar } from './components/Navbar';
@@ -22,9 +22,29 @@ const EMPTY_PROFILE: UserProfile = {
   stats: { played: 0, won: 0, winRate: 0 }, recentMatches: [], financialHistory: [],
 };
 
+type OrganizerSection = 'resumen' | 'finanzas' | 'participantes' | 'partidos' | 'configuracion';
+
+function readRoute() {
+  const parts = window.location.pathname.split('/').filter(Boolean).map(decodeURIComponent);
+  if (parts[0] === 'torneos' && parts[1] === 'crear') return { view: 'create-tournament' as ViewMode, tournamentId: '', section: 'resumen' as OrganizerSection };
+  if (parts[0] === 'torneos' && parts[1] && parts[2] === 'administrar') return { view: 'organizer-dashboard' as ViewMode, tournamentId: parts[1], section: (['resumen', 'finanzas', 'participantes', 'partidos', 'configuracion'].includes(parts[3]) ? parts[3] : 'resumen') as OrganizerSection };
+  if (parts[0] === 'torneos' && parts[1]) return { view: 'tournament-detail' as ViewMode, tournamentId: parts[1], section: 'resumen' as OrganizerSection };
+  const views: Record<string, ViewMode> = { torneos: 'tournaments', equipos: 'teams', partidos: 'matches', cuenta: 'profile', admin: 'admin-panel' };
+  return { view: views[parts[0]] || 'home', tournamentId: '', section: 'resumen' as OrganizerSection };
+}
+
+function routePath(view: ViewMode, tournamentId?: string, section: OrganizerSection = 'resumen') {
+  if (view === 'tournament-detail') return `/torneos/${encodeURIComponent(tournamentId || '')}`;
+  if (view === 'organizer-dashboard') return `/torneos/${encodeURIComponent(tournamentId || '')}/administrar/${section}`;
+  const paths: Record<ViewMode, string> = { home: '/', tournaments: '/torneos', 'create-tournament': '/torneos/crear', teams: '/equipos', matches: '/partidos', profile: '/cuenta', 'admin-panel': '/admin', 'tournament-detail': '/torneos', 'organizer-dashboard': '/torneos' };
+  return paths[view];
+}
+
 export default function App() {
-  const [currentView, setCurrentView] = useState<ViewMode>('home');
-  const [selectedTournamentId, setSelectedTournamentId] = useState('');
+  const initialRoute = useMemo(() => readRoute(), []);
+  const [currentView, setCurrentView] = useState<ViewMode>(initialRoute.view);
+  const [selectedTournamentId, setSelectedTournamentId] = useState(initialRoute.tournamentId);
+  const [organizerSection, setOrganizerSection] = useState<OrganizerSection>(initialRoute.section);
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
   const [userProfile, setUserProfile] = useState<UserProfile>(EMPTY_PROFILE);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -82,6 +102,18 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    const handlePopState = () => {
+      const route = readRoute();
+      setCurrentView(route.view);
+      setSelectedTournamentId(route.tournamentId);
+      setOrganizerSection(route.section);
+      window.scrollTo({ top: 0 });
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  useEffect(() => {
     if (!authInitialized) return;
     void refreshData(authUser?.id);
     if (!authUser) {
@@ -132,13 +164,16 @@ export default function App() {
   }, [authUser, refreshData]);
 
   const requireSession = () => { if (authUser) return true; setShowAuthModal(true); return false; };
-  const handleSignOut = async () => { await supabase?.auth.signOut(); setAuthUser(null); setCurrentView('home'); };
-  const handleNavigate = (view: ViewMode, tournamentId?: string) => {
+  const handleNavigate = (view: ViewMode, tournamentId?: string, section: OrganizerSection = 'resumen') => {
     if (['create-tournament', 'organizer-dashboard', 'profile'].includes(view) && !requireSession()) return;
     if (tournamentId) setSelectedTournamentId(tournamentId);
+    setOrganizerSection(section);
     setCurrentView(view);
+    const nextPath = routePath(view, tournamentId || selectedTournamentId, section);
+    if (window.location.pathname !== nextPath) window.history.pushState({}, '', nextPath);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
+  const handleSignOut = async () => { await supabase?.auth.signOut(); setAuthUser(null); handleNavigate('home'); };
 
   const handleTournamentCreated = async (tournament: Tournament) => {
     if (!authUser) throw new Error('Inicia sesión para publicar un torneo.');
@@ -221,7 +256,7 @@ export default function App() {
       {currentView === 'tournaments' && <ExploreTournamentsView tournaments={tournaments} onNavigate={handleNavigate} searchQuery={globalSearchQuery} onSearchQueryChange={setGlobalSearchQuery} />}
       {currentView === 'tournament-detail' && (currentTournament ? <TournamentDetailView tournament={currentTournament} matches={matches} participants={currentParticipants} onNavigate={handleNavigate} onRegister={handleRegister} /> : <EmptyState message="Este torneo no existe o ya no está disponible." onBack={() => handleNavigate('tournaments')} />)}
       {currentView === 'create-tournament' && authUser && <CreateTournamentWizard onTournamentCreated={handleTournamentCreated} onTournamentPublished={async tournamentId => { await refreshData(authUser.id); setSelectedTournamentId(tournamentId); }} onNavigate={handleNavigate} />}
-      {currentView === 'organizer-dashboard' && currentTournament?.isUserOrganizing && <OrganizerDashboardView transactions={transactions.filter(transaction => transaction.tournamentId === currentTournament.id)} pendingApprovals={pendingApprovals.filter(item => item.tournamentId === currentTournament.id)} tournaments={tournaments.filter(t => t.isUserOrganizing)} matches={matches.filter(match => match.tournamentId === currentTournament.id)} participants={currentParticipants} onNavigate={handleNavigate} onApproveTeam={id => void approveTeam(id)} onRejectTeam={id => void rejectTeam(id)} onUpdateMatchScore={(id, a, b) => void updateScore(id, a, b)} onUpdateTournamentSettings={saveTournamentSettings} />}
+      {currentView === 'organizer-dashboard' && currentTournament?.isUserOrganizing && <OrganizerDashboardView activeTournamentId={currentTournament.id} activeSection={organizerSection} transactions={transactions.filter(transaction => transaction.tournamentId === currentTournament.id)} pendingApprovals={pendingApprovals.filter(item => item.tournamentId === currentTournament.id)} tournaments={tournaments.filter(t => t.isUserOrganizing)} matches={matches.filter(match => match.tournamentId === currentTournament.id)} participants={currentParticipants} onNavigate={handleNavigate} onSectionChange={section => handleNavigate('organizer-dashboard', currentTournament.id, section)} onApproveTeam={id => void approveTeam(id)} onRejectTeam={id => void rejectTeam(id)} onUpdateMatchScore={(id, a, b) => void updateScore(id, a, b)} onUpdateTournamentSettings={saveTournamentSettings} />}
       {currentView === 'profile' && authUser && <ProfileAthleteView user={userProfile} onUpdateUser={profile => void updateProfile(profile)} onNavigate={handleNavigate} />}
       {currentView === 'teams' && <TeamsView participants={teamCards} tournaments={tournaments} onNavigate={handleNavigate} onCreateTeam={handleCreateTeam} />}
       {currentView === 'matches' && <MatchesView matches={matches} onNavigate={handleNavigate} />}

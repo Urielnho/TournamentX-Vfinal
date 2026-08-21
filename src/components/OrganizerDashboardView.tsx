@@ -28,12 +28,15 @@ import confetti from 'canvas-confetti';
 import { uploadTournamentBanner } from '../services/supabaseData';
 
 interface OrganizerDashboardViewProps {
+  activeTournamentId: string;
+  activeSection: 'resumen' | 'finanzas' | 'participantes' | 'partidos' | 'configuracion';
   transactions: Transaction[];
   pendingApprovals: PendingApproval[];
   tournaments?: Tournament[];
   matches?: Match[];
   participants?: Participant[];
   onNavigate: (view: ViewMode, tournamentId?: string) => void;
+  onSectionChange: (section: 'resumen' | 'finanzas' | 'participantes' | 'partidos' | 'configuracion') => void;
   onApproveTeam: (id: string, teamName: string) => void;
   onRejectTeam: (id: string) => void;
   onUpdateMatchScore?: (matchId: string, scoreA: number, scoreB: number, winnerId?: string) => void;
@@ -41,20 +44,21 @@ interface OrganizerDashboardViewProps {
 }
 
 export const OrganizerDashboardView: React.FC<OrganizerDashboardViewProps> = ({
+  activeTournamentId,
+  activeSection,
   transactions,
   pendingApprovals,
   tournaments = [],
   matches = [],
   participants = [],
   onNavigate,
+  onSectionChange,
   onApproveTeam,
   onRejectTeam,
   onUpdateMatchScore,
   onUpdateTournamentSettings,
 }) => {
-  const [activeSidebarItem, setActiveSidebarItem] = useState<
-    'resumen' | 'finanzas' | 'participantes' | 'partidos' | 'configuracion'
-  >('resumen');
+  const activeSidebarItem = activeSection;
   
   const [searchTx, setSearchTx] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'PAID' | 'PENDING'>('ALL');
@@ -66,17 +70,13 @@ export const OrganizerDashboardView: React.FC<OrganizerDashboardViewProps> = ({
   const [newTeamCaptain, setNewTeamCaptain] = useState('');
 
   // Selected tournament for management
-  const [selectedTournamentId, setSelectedTournamentId] = useState<string>(
-    tournaments[0]?.id || ''
-  );
-
   // Match score edit state
   const [editingMatchId, setEditingMatchId] = useState<string | null>(null);
   const [editScoreA, setEditScoreA] = useState<number>(0);
   const [editScoreB, setEditScoreB] = useState<number>(0);
 
   // Tournament settings editable state
-  const currentTourn = tournaments.find(t => t.id === selectedTournamentId) || tournaments[0];
+  const currentTourn = tournaments.find(t => t.id === activeTournamentId) || tournaments[0];
   const [tournTitle, setTournTitle] = useState(currentTourn?.title || 'Torneo Principal');
   const [tournDescription, setTournDescription] = useState(currentTourn?.description || '');
   const [tournBannerUrl, setTournBannerUrl] = useState(currentTourn?.bannerUrl || '');
@@ -202,7 +202,7 @@ export const OrganizerDashboardView: React.FC<OrganizerDashboardViewProps> = ({
           </div>
 
           <button
-            onClick={() => setActiveSidebarItem('resumen')}
+            onClick={() => onSectionChange('resumen')}
             className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-2xl text-xs font-bold transition-colors cursor-pointer ${
               activeSidebarItem === 'resumen' ? 'bg-black text-white' : 'text-gray-700 hover:bg-[#F3F4F6] hover:text-black'
             }`}
@@ -212,7 +212,7 @@ export const OrganizerDashboardView: React.FC<OrganizerDashboardViewProps> = ({
           </button>
 
           <button
-            onClick={() => setActiveSidebarItem('finanzas')}
+            onClick={() => onSectionChange('finanzas')}
             className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-2xl text-xs font-bold transition-colors cursor-pointer ${
               activeSidebarItem === 'finanzas' ? 'bg-black text-white' : 'text-gray-700 hover:bg-[#F3F4F6] hover:text-black'
             }`}
@@ -222,7 +222,7 @@ export const OrganizerDashboardView: React.FC<OrganizerDashboardViewProps> = ({
           </button>
 
           <button
-            onClick={() => setActiveSidebarItem('participantes')}
+            onClick={() => onSectionChange('participantes')}
             className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-xs font-bold transition-colors cursor-pointer ${
               activeSidebarItem === 'participantes' ? 'bg-black text-white' : 'text-gray-700 hover:bg-[#F3F4F6] hover:text-black'
             }`}
@@ -239,7 +239,7 @@ export const OrganizerDashboardView: React.FC<OrganizerDashboardViewProps> = ({
           </button>
 
           <button
-            onClick={() => setActiveSidebarItem('partidos')}
+            onClick={() => onSectionChange('partidos')}
             className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-2xl text-xs font-bold transition-colors cursor-pointer ${
               activeSidebarItem === 'partidos' ? 'bg-black text-white' : 'text-gray-700 hover:bg-[#F3F4F6] hover:text-black'
             }`}
@@ -249,7 +249,7 @@ export const OrganizerDashboardView: React.FC<OrganizerDashboardViewProps> = ({
           </button>
 
           <button
-            onClick={() => setActiveSidebarItem('configuracion')}
+            onClick={() => onSectionChange('configuracion')}
             className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-2xl text-xs font-bold transition-colors cursor-pointer ${
               activeSidebarItem === 'configuracion' ? 'bg-black text-white' : 'text-gray-700 hover:bg-[#F3F4F6] hover:text-black'
             }`}
@@ -265,8 +265,8 @@ export const OrganizerDashboardView: React.FC<OrganizerDashboardViewProps> = ({
             Torneo Activo
           </span>
           <select
-            value={selectedTournamentId}
-            onChange={(e) => setSelectedTournamentId(e.target.value)}
+            value={activeTournamentId}
+            onChange={(e) => onNavigate('organizer-dashboard', e.target.value)}
             className="w-full bg-[#F9FAFB] border border-[#E5E7EB] rounded-xl px-3 py-2 text-xs font-bold text-black outline-none cursor-pointer"
           >
             {tournaments.map(t => (
@@ -363,7 +363,7 @@ export const OrganizerDashboardView: React.FC<OrganizerDashboardViewProps> = ({
                     <span>Aprobaciones Pendientes ({pendingApprovals.length})</span>
                   </h3>
                   <button 
-                    onClick={() => setActiveSidebarItem('participantes')}
+                    onClick={() => onSectionChange('participantes')}
                     className="text-xs font-bold text-gray-600 hover:text-black hover:underline cursor-pointer"
                   >
                     Ver todas
@@ -414,7 +414,7 @@ export const OrganizerDashboardView: React.FC<OrganizerDashboardViewProps> = ({
                     <span>Partidos Próximos / En Curso</span>
                   </h3>
                   <button 
-                    onClick={() => setActiveSidebarItem('partidos')}
+                    onClick={() => onSectionChange('partidos')}
                     className="text-xs font-bold text-gray-600 hover:text-black hover:underline cursor-pointer"
                   >
                     Gestionar
