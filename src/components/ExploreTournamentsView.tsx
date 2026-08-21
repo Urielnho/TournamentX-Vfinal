@@ -6,15 +6,18 @@ import { isRegistrationOpen, isViewOnlyTournament } from '../utils/tournamentAva
 interface ExploreTournamentsViewProps {
   tournaments: Tournament[];
   onNavigate: (view: ViewMode, tournamentId?: string) => void;
+  searchQuery: string;
+  onSearchQueryChange: (query: string) => void;
 }
 
 export const ExploreTournamentsView: React.FC<ExploreTournamentsViewProps> = ({ 
   tournaments, 
-  onNavigate 
+  onNavigate,
+  searchQuery,
+  onSearchQueryChange,
 }) => {
   type TournamentTab = 'explorar' | 'en_vivo' | 'participando' | 'organizando' | 'historial';
   const [activeTab, setActiveTab] = useState<TournamentTab>('explorar');
-  const [searchQuery, setSearchQuery] = useState('');
   const [sportFilter, setSportFilter] = useState('All Sports');
   const [statusFilter, setStatusFilter] = useState('All Status');
   const [selectedDiscipline, setSelectedDiscipline] = useState<string>('all');
@@ -45,10 +48,9 @@ export const ExploreTournamentsView: React.FC<ExploreTournamentsViewProps> = ({
       }
 
       // Search query
-      const matchSearch = 
-        t.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        t.game.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        t.organizer.name.toLowerCase().includes(searchQuery.toLowerCase());
+      const normalizedSearch = searchQuery.trim().toLocaleLowerCase('es-MX');
+      const searchableText = [t.title, t.game, t.gameMode, t.organizer.name, t.description].join(' ').toLocaleLowerCase('es-MX');
+      const matchSearch = normalizedSearch.split(/\s+/).every(term => searchableText.includes(term));
       if (!matchSearch) return false;
 
       // Sport filter
@@ -125,7 +127,7 @@ export const ExploreTournamentsView: React.FC<ExploreTournamentsViewProps> = ({
             <input 
               type="text" 
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => onSearchQueryChange(e.target.value)}
               placeholder="Buscar torneo por título, juego u organizador..."
               className="w-full bg-[#F9FAFB] border border-[#E5E7EB] focus:border-black rounded-2xl py-2.5 pl-10 pr-4 text-xs text-black placeholder-gray-400 outline-none"
             />

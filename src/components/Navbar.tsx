@@ -10,10 +10,13 @@ interface NavbarProps {
   authUser: SupabaseUser | null;
   onSignIn: () => void;
   onSignOut: () => Promise<void>;
+  searchQuery: string;
+  onSearchQueryChange: (query: string) => void;
+  onSearchSubmit: () => void;
 }
 const links: { label: string; view: ViewMode }[] = [{ label: 'Inicio', view: 'home' }, { label: 'Equipos', view: 'teams' }, { label: 'Torneos', view: 'tournaments' }, { label: 'Partidos', view: 'matches' }];
 
-export const Navbar: React.FC<NavbarProps> = ({ currentView, onNavigate, user, authUser, onSignIn, onSignOut }) => {
+export const Navbar: React.FC<NavbarProps> = ({ currentView, onNavigate, user, authUser, onSignIn, onSignOut, searchQuery, onSearchQueryChange, onSearchSubmit }) => {
   const [profileOpen, setProfileOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -25,7 +28,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentView, onNavigate, user, a
     <div className="mx-auto flex h-16 max-w-[1440px] items-center gap-5 px-4 md:px-8">
       <button onClick={() => go('home')} className="shrink-0 text-xl font-black tracking-tight">TOURNAMENTX</button>
       <div className="hidden items-center gap-1 md:flex">{links.map(link => <button key={link.view} onClick={() => go(link.view)} className={`px-4 py-2 text-sm font-bold transition ${isActive(link.view) ? 'text-black' : 'text-gray-500 hover:text-black'}`}>{link.label}</button>)}</div>
-      <div className="ml-auto hidden max-w-sm flex-1 items-center gap-2 rounded-xl border border-[#E5E7EB] bg-[#F8F9FA] px-3 py-2 lg:flex"><Search className="h-4 w-4 text-gray-400" /><input aria-label="Buscar" placeholder="Buscar torneos, equipos o jugadores" className="w-full bg-transparent text-xs outline-none placeholder:text-gray-400" /></div>
+      <form onSubmit={event => { event.preventDefault(); onSearchSubmit(); }} className="ml-auto hidden max-w-sm flex-1 items-center gap-2 rounded-xl border border-[#E5E7EB] bg-[#F8F9FA] px-3 py-2 focus-within:border-black lg:flex"><Search className="h-4 w-4 text-gray-400" /><input aria-label="Buscar torneos" value={searchQuery} onChange={event => onSearchQueryChange(event.target.value)} placeholder="Buscar por torneo, juego, modo u organizador" className="w-full bg-transparent text-xs outline-none placeholder:text-gray-400" /><button type="submit" className="sr-only">Buscar</button></form>
       <div className="ml-auto flex items-center gap-2 lg:ml-0">
         <div className="relative"><button aria-label="Notificaciones" onClick={() => { setNotificationsOpen(!notificationsOpen); setProfileOpen(false); }} className="relative rounded-xl border border-[#E5E7EB] bg-[#F8F9FA] p-2.5 hover:border-black"><Bell className="h-4 w-4" /><span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-black" /></button>
           {notificationsOpen && <div className="absolute right-0 mt-3 w-80 rounded-2xl border border-[#E5E7EB] bg-white p-4 shadow-2xl"><p className="mb-3 text-sm font-black">Notificaciones</p><p className="rounded-xl bg-[#F8F9FA] p-4 text-center text-xs text-gray-500">No tienes notificaciones.</p></div>}

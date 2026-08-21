@@ -39,6 +39,7 @@ export default function App() {
   const [loadingData, setLoadingData] = useState(true);
   const [dataError, setDataError] = useState('');
   const [paymentNotice, setPaymentNotice] = useState('');
+  const [globalSearchQuery, setGlobalSearchQuery] = useState('');
   const [registrationPayment, setRegistrationPayment] = useState<{ clientSecret: string; paymentIntentId: string; amount: number; tournamentTitle: string } | null>(null);
   const dataRequestId = useRef(0);
 
@@ -210,13 +211,13 @@ export default function App() {
   const teamCards: Participant[] = teams.map(team => ({ id: team.id, tournamentId: team.tournamentId, name: team.name, tag: team.tag, logo: team.logo, captain: team.captainName, captainId: team.captainId, membersCount: team.members.length, status: team.status === 'confirmed' ? 'confirmed' : 'pending' }));
 
   return <div className="flex min-h-screen flex-col bg-white text-black selection:bg-black selection:text-white">
-    <Navbar currentView={currentView} onNavigate={handleNavigate} user={userProfile} authUser={authUser} onSignIn={() => setShowAuthModal(true)} onSignOut={handleSignOut} />
+    <Navbar currentView={currentView} onNavigate={handleNavigate} user={userProfile} authUser={authUser} onSignIn={() => setShowAuthModal(true)} onSignOut={handleSignOut} searchQuery={globalSearchQuery} onSearchQueryChange={setGlobalSearchQuery} onSearchSubmit={() => handleNavigate('tournaments')} />
     <main className="flex-1 bg-[#f5f6f8] text-black">
       {dataError && <div className="mx-auto mt-4 max-w-4xl rounded-2xl border border-red-200 bg-red-50 px-5 py-3 text-sm font-semibold text-red-700">{dataError}</div>}
       {paymentNotice && <div className="mx-auto mt-4 flex max-w-4xl items-center justify-between gap-4 rounded-2xl border border-gray-200 bg-white px-5 py-3 text-sm font-semibold"><span>{paymentNotice}</span><button onClick={() => setPaymentNotice('')} className="text-xs text-gray-500">Cerrar</button></div>}
       {loadingData && <div className="mx-auto max-w-4xl px-6 py-4 text-center text-xs font-bold text-gray-500">Cargando datos de TournamentX…</div>}
       {currentView === 'home' && <HomeView tournaments={tournaments} onNavigate={handleNavigate} />}
-      {currentView === 'tournaments' && <ExploreTournamentsView tournaments={tournaments} onNavigate={handleNavigate} />}
+      {currentView === 'tournaments' && <ExploreTournamentsView tournaments={tournaments} onNavigate={handleNavigate} searchQuery={globalSearchQuery} onSearchQueryChange={setGlobalSearchQuery} />}
       {currentView === 'tournament-detail' && (currentTournament ? <TournamentDetailView tournament={currentTournament} matches={matches} participants={currentParticipants} onNavigate={handleNavigate} onRegister={handleRegister} /> : <EmptyState message="Este torneo no existe o ya no está disponible." onBack={() => handleNavigate('tournaments')} />)}
       {currentView === 'create-tournament' && authUser && <CreateTournamentWizard onTournamentCreated={handleTournamentCreated} onTournamentPublished={async tournamentId => { await refreshData(authUser.id); setSelectedTournamentId(tournamentId); }} onNavigate={handleNavigate} />}
       {currentView === 'organizer-dashboard' && currentTournament?.isUserOrganizing && <OrganizerDashboardView transactions={transactions.filter(transaction => transaction.tournamentId === currentTournament.id)} pendingApprovals={pendingApprovals.filter(item => item.tournamentId === currentTournament.id)} tournaments={tournaments.filter(t => t.isUserOrganizing)} matches={matches.filter(match => match.tournamentId === currentTournament.id)} participants={currentParticipants} onNavigate={handleNavigate} onApproveTeam={id => void approveTeam(id)} onRejectTeam={id => void rejectTeam(id)} onUpdateMatchScore={(id, a, b) => void updateScore(id, a, b)} />}
