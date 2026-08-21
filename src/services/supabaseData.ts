@@ -1,5 +1,6 @@
 import { AdminUserSummary, Match, Participant, PendingApproval, Team, Tournament, Transaction } from '../types';
 import { supabase } from '../lib/supabase';
+import { toInstant } from '../utils/dateInput';
 
 const defaultBanner = 'https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=1400&q=80';
 
@@ -303,16 +304,6 @@ export async function loadAppData(userId?: string): Promise<AppDatabaseData> {
   return { tournaments, teams, participants, matches, transactions, pendingApprovals, users };
 }
 
-// Los inputs datetime-local entregan "2026-08-25T18:00", sin zona horaria. Postgres
-// interpreta ese texto como UTC al guardarlo en un timestamptz, así que la fecha
-// acababa adelantándose tantas horas como el huso local (7 en Hermosillo) y un
-// cierre de inscripciones puesto para hoy por la tarde nacía ya vencido.
-// new Date() sí parsea la cadena como hora local, así que toISOString da el instante real.
-function toInstant(localDateTime: string) {
-  const parsed = new Date(localDateTime);
-  return Number.isNaN(parsed.getTime()) ? localDateTime : parsed.toISOString();
-}
-
 export async function insertTournament(tournament: Tournament, organizerId: string): Promise<string> {
   if (!supabase) throw new Error('Supabase no está configurado.');
   if (tournament.status === 'draft') {
@@ -362,6 +353,9 @@ export async function updateTournamentSettings(tournamentId: string, settings: {
   stream?: Tournament['stream'];
   organizerPercentage: number;
   status: Tournament['status'];
+  startDate: string;
+  endDate: string;
+  registrationDeadline: string;
 }) {
   if (!supabase) throw new Error('Supabase no está configurado.');
   const { error } = await supabase.from('tournaments').update({
@@ -371,6 +365,9 @@ export async function updateTournamentSettings(tournamentId: string, settings: {
     stream: settings.stream || null,
     organizer_percentage: settings.organizerPercentage,
     status: settings.status,
+    start_date: toInstant(settings.startDate),
+    end_date: toInstant(settings.endDate),
+    registration_deadline: toInstant(settings.registrationDeadline),
   }).eq('id', tournamentId).select('id').single();
   if (error) throw error;
 }

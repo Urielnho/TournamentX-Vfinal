@@ -29,6 +29,7 @@ import confetti from 'canvas-confetti';
 import { uploadTournamentBanner } from '../services/supabaseData';
 import { ConfirmDialog } from './ConfirmDialog';
 import { canDeleteTournament, deleteBlockedReason } from '../utils/tournamentAvailability';
+import { toLocalDateTimeInput } from '../utils/dateInput';
 
 interface OrganizerDashboardViewProps {
   activeTournamentId: string;
@@ -46,7 +47,7 @@ interface OrganizerDashboardViewProps {
   onGenerateBracket: (tournamentId: string) => Promise<number>;
   onClearBracket: (tournamentId: string) => Promise<void>;
   onScheduleMatch: (matchId: string, scheduledAt: string, streamUrl?: string) => Promise<void>;
-  onUpdateTournamentSettings: (tournamentId: string, settings: { title: string; description: string; bannerUrl: string; stream?: Tournament['stream']; organizerPercentage: number; status: Tournament['status'] }) => Promise<void>;
+  onUpdateTournamentSettings: (tournamentId: string, settings: { title: string; description: string; bannerUrl: string; stream?: Tournament['stream']; organizerPercentage: number; status: Tournament['status']; startDate: string; endDate: string; registrationDeadline: string }) => Promise<void>;
   onDeleteTournament: (tournamentId: string) => Promise<{ success: boolean; message: string }>;
 }
 
@@ -121,6 +122,9 @@ export const OrganizerDashboardView: React.FC<OrganizerDashboardViewProps> = ({
   const [settingsError, setSettingsError] = useState('');
   const [organizerFeePercent, setOrganizerFeePercent] = useState(currentTourn?.organizerPercentage ?? 15);
   const [tournStatus, setTournStatus] = useState<string>(currentTourn?.status || 'open');
+  const [tournDeadline, setTournDeadline] = useState(toLocalDateTimeInput(currentTourn?.registrationDeadline || ''));
+  const [tournStartDate, setTournStartDate] = useState(toLocalDateTimeInput(currentTourn?.startDate || ''));
+  const [tournEndDate, setTournEndDate] = useState(toLocalDateTimeInput(currentTourn?.endDate || ''));
 
   useEffect(() => {
     if (!currentTourn) return;
@@ -129,12 +133,27 @@ export const OrganizerDashboardView: React.FC<OrganizerDashboardViewProps> = ({
     setTournBannerUrl(currentTourn.bannerUrl);
     setOrganizerFeePercent(currentTourn.organizerPercentage);
     setTournStatus(currentTourn.status);
+    setTournDeadline(toLocalDateTimeInput(currentTourn.registrationDeadline));
+    setTournStartDate(toLocalDateTimeInput(currentTourn.startDate));
+    setTournEndDate(toLocalDateTimeInput(currentTourn.endDate));
     setStreamEnabled(Boolean(currentTourn.stream));
     setStreamPlatform(currentTourn.stream?.platform || 'twitch');
     setStreamChannel(currentTourn.stream?.channelName || '');
     setStreamUrl(currentTourn.stream?.url || '');
     setSettingsError('');
   }, [currentTourn?.id]);
+
+  // Mover las fechas del torneo no reprograma los partidos ya agendados: el rango solo
+  // se valida al programarlos, así que avisamos si alguno queda fuera del nuevo periodo.
+  const matchesOutsideDates = useMemo(() => {
+    const start = new Date(tournStartDate).getTime();
+    const end = new Date(tournEndDate).getTime();
+    if (Number.isNaN(start) || Number.isNaN(end)) return 0;
+    return matches.filter(match => {
+      const scheduled = new Date(match.date).getTime();
+      return !Number.isNaN(scheduled) && (scheduled < start || scheduled > end);
+    }).length;
+  }, [matches, tournStartDate, tournEndDate]);
 
   const filteredTransactions = useMemo(() => {
     return transactions.filter(tx => {
@@ -203,9 +222,13 @@ export const OrganizerDashboardView: React.FC<OrganizerDashboardViewProps> = ({
         if (parsed.protocol !== 'https:') throw new Error();
       } catch { return setSettingsError('La transmisión necesita una URL HTTPS válida.'); }
     }
+    if (!tournDeadline || !tournStartDate || !tournEndDate) return setSettingsError('Completa las tres fechas del torneo.');
+    // Mismas reglas que el trigger validate_tournament_dates, para avisar antes de ir al servidor.
+    if (new Date(tournDeadline) > new Date(tournStartDate)) return setSettingsError('El cierre de inscripciones no puede ser posterior al inicio.');
+    if (new Date(tournEndDate) < new Date(tournStartDate)) return setSettingsError('La finalización no puede ser anterior al inicio.');
     try {
       setIsSavingSettings(true);
-      await onUpdateTournamentSettings(currentTourn.id, { title: tournTitle, description: tournDescription, bannerUrl: tournBannerUrl, stream: streamEnabled ? { platform: streamPlatform, url: streamUrl.trim(), channelName: streamChannel.trim() || undefined } : undefined, organizerPercentage: organizerFeePercent, status: tournStatus as Tournament['status'] });
+      await onUpdateTournamentSettings(currentTourn.id, { title: tournTitle, description: tournDescription, bannerUrl: tournBannerUrl, stream: streamEnabled ? { platform: streamPlatform, url: streamUrl.trim(), channelName: streamChannel.trim() || undefined } : undefined, organizerPercentage: organizerFeePercent, status: tournStatus as Tournament['status'], registrationDeadline: tournDeadline, startDate: tournStartDate, endDate: tournEndDate });
       setActionSuccessMessage('Configuración del torneo guardada.');
       setTimeout(() => setActionSuccessMessage(null), 3000);
     } catch (error) { setSettingsError(error instanceof Error ? error.message : 'No se pudo guardar la configuración.'); }
@@ -791,6 +814,28 @@ export const OrganizerDashboardView: React.FC<OrganizerDashboardViewProps> = ({
                   <option value="live">En Vivo / En Progreso</option>
                   <option value="completed">Finalizado</option>
                 </select>
+              </div>
+
+              <div className="space-y-3 rounded-2xl border border-[#E5E7EB] p-4">
+                <div>
+                  <p className="font-bold text-black">Fechas del torneo</p>
+                  <p className="text-[11px] text-gray-500">Se guardan y se muestran en tu horario local ({Intl.DateTimeFormat().resolvedOptions().timeZone}).</p>
+                </div>
+                <div className="grid gap-3 md:grid-cols-3">
+                  <div>
+                    <label className="font-bold text-black block mb-1">Cierre de inscripciones</label>
+                    <input type="datetime-local" value={tournDeadline} max={tournStartDate || undefined} onChange={event => setTournDeadline(event.target.value)} className="w-full rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] p-3 outline-none focus:border-black" />
+                  </div>
+                  <div>
+                    <label className="font-bold text-black block mb-1">Inicio del torneo</label>
+                    <input type="datetime-local" value={tournStartDate} min={tournDeadline || undefined} onChange={event => setTournStartDate(event.target.value)} className="w-full rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] p-3 outline-none focus:border-black" />
+                  </div>
+                  <div>
+                    <label className="font-bold text-black block mb-1">Finalización</label>
+                    <input type="datetime-local" value={tournEndDate} min={tournStartDate || undefined} onChange={event => setTournEndDate(event.target.value)} className="w-full rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] p-3 outline-none focus:border-black" />
+                  </div>
+                </div>
+                {matchesOutsideDates > 0 && <p role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-[11px] font-semibold text-amber-800">{matchesOutsideDates === 1 ? 'Hay 1 partido programado' : `Hay ${matchesOutsideDates} partidos programados`} fuera de este rango. Cambiar las fechas no los reprograma: revísalos en la sección Partidos.</p>}
               </div>
 
               <button
