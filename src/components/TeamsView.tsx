@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { Participant, Tournament, ViewMode } from '../types';
+import { Participant, Tournament, UserProfile, ViewMode } from '../types';
 import { Plus, X, Search, Users, Trophy, Shield, Check } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 interface TeamsViewProps {
   participants: Participant[];
   tournaments: Tournament[];
+  currentUser: UserProfile;
   onNavigate: (view: ViewMode, tournamentId?: string) => void;
   onCreateTeam: (tournamentId: string, name: string, tag: string) => Promise<void>;
 }
@@ -13,6 +14,7 @@ interface TeamsViewProps {
 export const TeamsView: React.FC<TeamsViewProps> = ({
   participants,
   tournaments,
+  currentUser,
   onNavigate,
   onCreateTeam
 }) => {
@@ -21,7 +23,6 @@ export const TeamsView: React.FC<TeamsViewProps> = ({
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [teamName, setTeamName] = useState('');
   const [teamTag, setTeamTag] = useState('');
-  const [captainName, setCaptainName] = useState('Apex (Tú)');
   const [selectedTournamentId, setSelectedTournamentId] = useState('');
   const [createError, setCreateError] = useState('');
 
@@ -169,12 +170,8 @@ export const TeamsView: React.FC<TeamsViewProps> = ({
 
               <div>
                 <label className="font-bold text-gray-600 uppercase block mb-1">Capitán / Líder</label>
-                <input 
-                  type="text" 
-                  value={captainName}
-                  onChange={(e) => setCaptainName(e.target.value)}
-                  className="w-full bg-[#F9FAFB] border border-[#E5E7EB] focus:border-black rounded-xl px-3.5 py-2.5 text-black outline-none"
-                />
+                <div className="w-full rounded-xl border border-[#E5E7EB] bg-gray-100 px-3.5 py-2.5 font-bold text-black">{currentUser.gamerTag || currentUser.name} <span className="font-normal text-gray-500">({currentUser.name} · tú)</span></div>
+                <p className="mt-1.5 text-[11px] text-gray-500">Tu cuenta quedará registrada automáticamente como capitán y responsable del premio.</p>
               </div>
 
               <div className="flex gap-3 pt-2">

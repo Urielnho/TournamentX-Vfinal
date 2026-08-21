@@ -183,13 +183,14 @@ export default function App() {
     return { ...tournament, id, organizerId: authUser.id, organizer: { name: userProfile.name, avatar: userProfile.avatarUrl }, isUserOrganizing: true };
   };
 
-  const handleRegister = async (tournamentId: string, teamName: string, _ign: string, type: 'team' | 'individual') => {
+  const handleRegister = async (tournamentId: string, teamName: string, _ign: string, type: 'team' | 'individual', selectedTeamId?: string) => {
     if (!authUser) { setShowAuthModal(true); throw new Error('Inicia sesión para inscribirte.'); }
     const tournament = tournaments.find(item => item.id === tournamentId);
     if (!tournament) throw new Error('El torneo ya no está disponible.');
     if (tournament.organizerId === authUser.id) throw new Error('El organizador no puede participar en su propio torneo.');
     if (type !== tournament.participantType) throw new Error(tournament.participantType === 'individual' ? 'Este torneo solo acepta inscripciones individuales.' : 'Este torneo solo acepta inscripciones por equipo.');
-    const existingTeam = type === 'team' ? teams.find(team => team.tournamentId === tournamentId && team.captainId === authUser.id && team.name.toLowerCase() === teamName.trim().toLowerCase()) : undefined;
+    const existingTeam = type === 'team' && selectedTeamId ? teams.find(team => team.id === selectedTeamId && team.tournamentId === tournamentId && team.captainId === authUser.id) : undefined;
+    if (type === 'team' && selectedTeamId && !existingTeam) throw new Error('Solo el capitán puede inscribir este equipo.');
     const teamId = type === 'team' ? existingTeam?.id || await insertTeam(tournamentId, authUser.id, teamName, teamName.slice(0, 5).toUpperCase()) : undefined;
     if (tournament.entryFeeType !== 'free' && tournament.entryFeeAmount > 0) {
       const payment = await createRegistrationPaymentIntent(tournamentId, teamId);
@@ -254,11 +255,11 @@ export default function App() {
       {loadingData && <div className="mx-auto max-w-4xl px-6 py-4 text-center text-xs font-bold text-gray-500">Cargando datos de TournamentX…</div>}
       {currentView === 'home' && <HomeView tournaments={tournaments} onNavigate={handleNavigate} />}
       {currentView === 'tournaments' && <ExploreTournamentsView tournaments={tournaments} onNavigate={handleNavigate} searchQuery={globalSearchQuery} onSearchQueryChange={setGlobalSearchQuery} />}
-      {currentView === 'tournament-detail' && (currentTournament ? <TournamentDetailView tournament={currentTournament} matches={matches} participants={currentParticipants} onNavigate={handleNavigate} onRegister={handleRegister} /> : <EmptyState message="Este torneo no existe o ya no está disponible." onBack={() => handleNavigate('tournaments')} />)}
+      {currentView === 'tournament-detail' && (currentTournament ? <TournamentDetailView tournament={currentTournament} matches={matches} participants={currentParticipants} teams={teams} currentUser={userProfile} onNavigate={handleNavigate} onRegister={handleRegister} /> : <EmptyState message="Este torneo no existe o ya no está disponible." onBack={() => handleNavigate('tournaments')} />)}
       {currentView === 'create-tournament' && authUser && <CreateTournamentWizard onTournamentCreated={handleTournamentCreated} onTournamentPublished={async tournamentId => { await refreshData(authUser.id); setSelectedTournamentId(tournamentId); }} onNavigate={handleNavigate} />}
       {currentView === 'organizer-dashboard' && currentTournament?.isUserOrganizing && <OrganizerDashboardView activeTournamentId={currentTournament.id} activeSection={organizerSection} transactions={transactions.filter(transaction => transaction.tournamentId === currentTournament.id)} pendingApprovals={pendingApprovals.filter(item => item.tournamentId === currentTournament.id)} tournaments={tournaments.filter(t => t.isUserOrganizing)} matches={matches.filter(match => match.tournamentId === currentTournament.id)} participants={currentParticipants} onNavigate={handleNavigate} onSectionChange={section => handleNavigate('organizer-dashboard', currentTournament.id, section)} onApproveTeam={id => void approveTeam(id)} onRejectTeam={id => void rejectTeam(id)} onUpdateMatchScore={(id, a, b) => void updateScore(id, a, b)} onUpdateTournamentSettings={saveTournamentSettings} />}
       {currentView === 'profile' && authUser && <ProfileAthleteView user={userProfile} onUpdateUser={profile => void updateProfile(profile)} onNavigate={handleNavigate} />}
-      {currentView === 'teams' && <TeamsView participants={teamCards} tournaments={tournaments} onNavigate={handleNavigate} onCreateTeam={handleCreateTeam} />}
+      {currentView === 'teams' && <TeamsView participants={teamCards} tournaments={tournaments} currentUser={userProfile} onNavigate={handleNavigate} onCreateTeam={handleCreateTeam} />}
       {currentView === 'matches' && <MatchesView matches={matches} onNavigate={handleNavigate} />}
       {currentView === 'admin-panel' && userProfile.globalRole === 'admin' && <AdminDashboardView tournaments={tournaments} teams={teams} transactions={transactions} users={users} currentUser={userProfile} onNavigate={handleNavigate} onDeleteTournament={deleteTournament} onUpdateUserStatus={() => undefined} onDeleteUser={() => undefined} onDeleteTeam={deleteTeam} />}
     </main>

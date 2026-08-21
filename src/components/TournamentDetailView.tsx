@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Tournament, Match, Participant, ViewMode } from '../types';
+import { Tournament, Match, Participant, Team, UserProfile, ViewMode } from '../types';
 import { Shield, Trophy, Share2, Sparkles, X, Check, Users, Calendar, ArrowLeft, Clock, Tv, ExternalLink } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { isRegistrationOpen, registrationClosedReason } from '../utils/tournamentAvailability';
@@ -38,14 +38,18 @@ interface TournamentDetailViewProps {
   tournament: Tournament;
   matches: Match[];
   participants: Participant[];
+  teams: Team[];
+  currentUser: UserProfile;
   onNavigate: (view: ViewMode, tournamentId?: string) => void;
-  onRegister: (tournamentId: string, teamName: string, ign: string, type: 'team' | 'individual') => Promise<'payment_pending' | 'confirmed'>;
+  onRegister: (tournamentId: string, teamName: string, ign: string, type: 'team' | 'individual', teamId?: string) => Promise<'payment_pending' | 'confirmed'>;
 }
 
 export const TournamentDetailView: React.FC<TournamentDetailViewProps> = ({
   tournament,
   matches,
   participants,
+  teams,
+  currentUser,
   onNavigate,
   onRegister
 }) => {
@@ -56,18 +60,18 @@ export const TournamentDetailView: React.FC<TournamentDetailViewProps> = ({
   const [showRegisterModal, setShowRegisterModal] = useState(false);
   const [regType, setRegType] = useState<'team' | 'individual'>('team');
   const [regTeamName, setRegTeamName] = useState('');
-  const [regPlayerIgn, setRegPlayerIgn] = useState('');
+  const [selectedTeamId, setSelectedTeamId] = useState('new');
   const [registrationSuccess, setRegistrationSuccess] = useState(false);
   const [registrationError, setRegistrationError] = useState('');
 
   const handleConfirmRegistration = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (regType === 'team' && !regTeamName.trim()) return;
-    if (!regPlayerIgn.trim()) return;
+    if (regType === 'team' && selectedTeamId === 'new' && !regTeamName.trim()) return;
 
     setRegistrationError('');
     try {
-      const result = await onRegister(tournament.id, regTeamName || `${regPlayerIgn} Squad`, regPlayerIgn, regType);
+      const selectedTeam = teams.find(team => team.id === selectedTeamId);
+      const result = await onRegister(tournament.id, selectedTeam?.name || regTeamName, currentUser.gamerTag, regType, selectedTeam?.id);
       if (result === 'payment_pending') { setShowRegisterModal(false); return; }
       setRegistrationSuccess(true);
       confetti({ particleCount: 50, spread: 50, origin: { y: 0.6 } });
@@ -89,6 +93,7 @@ export const TournamentDetailView: React.FC<TournamentDetailViewProps> = ({
   const totalPrizePool = tournament.financials?.prizeAmount ?? tournament.basePrizePool;
   const registrationOpen = isRegistrationOpen(tournament);
   const streamPresentation = getStreamPresentation(tournament.stream);
+  const captainTeams = teams.filter(team => team.tournamentId === tournament.id && team.captainId === currentUser.id);
 
   const detailTabs = [
     { id: 'resumen', label: 'Resumen' },
@@ -326,7 +331,7 @@ export const TournamentDetailView: React.FC<TournamentDetailViewProps> = ({
                 </div>
                 <div className="overflow-hidden">
                   <h4 className="text-xs font-bold text-black truncate">{p.name}</h4>
-                  <p className="text-[10px] text-gray-500 truncate">Capitán: {p.captain || 'Sin asignar'} • {p.membersCount ?? 0} jugadores</p>
+                  <p className="text-[10px] text-gray-500 truncate">Capitán y responsable del premio: {p.captain || 'Sin asignar'} • {p.membersCount ?? 0} jugadores</p>
                 </div>
               </div>
             ))}
@@ -343,6 +348,7 @@ export const TournamentDetailView: React.FC<TournamentDetailViewProps> = ({
 
         {/* Tab 6: PREMIOS */}
         {activeTab === 'premios' && <div className="space-y-4">
+          {tournament.participantType === 'team' && <div className="rounded-3xl border border-blue-200 bg-blue-50 p-5 text-xs text-blue-950"><b>Premios por equipo:</b> cuando se confirme un equipo ganador, el premio quedará asociado al capitán registrado de ese equipo. Los demás integrantes no pueden cambiar al responsable ni solicitarlo por su cuenta.</div>}
           {tournament.prizeType === 'other' && <div className="rounded-3xl border border-amber-300 bg-amber-50 p-5 text-amber-950"><h3 className="font-black">Premio entregado por el organizador</h3><p className="mt-2 text-sm">{tournament.otherPrizeDescription || 'Premio externo pendiente de descripción.'}</p><p className="mt-3 text-xs"><b>Aviso:</b> este premio no monetario se entrega fuera de Stripe. TournamentX no lo custodia y no se responsabiliza si el organizador incumple su entrega.</p></div>}
           {tournament.entryFeeAmount > 0 && tournament.prizeType !== 'no_prize' && <div className="rounded-3xl border border-[#E5E7EB] bg-white p-5 text-xs text-gray-700"><p><b>Distribución del dinero:</b> el {tournament.organizerPercentage}% corresponde al organizador y el {100 - tournament.organizerPercentage}% restante queda destinado a los ganadores; no se entrega al organizador.</p>{tournament.financials && <p className="mt-2">Actualmente: organizador ${tournament.financials.organizerAmount.toLocaleString('es-MX')} MXN · ganadores ${tournament.financials.prizeAmount.toLocaleString('es-MX')} MXN.</p>}</div>}
           {tournament.prizesBreakdown.length > 0 ? <div className={`grid grid-cols-1 gap-4 ${tournament.prizesBreakdown.length > 1 ? 'sm:grid-cols-2' : ''} ${tournament.prizesBreakdown.length > 2 ? 'lg:grid-cols-3' : ''}`}>
@@ -401,29 +407,19 @@ export const TournamentDetailView: React.FC<TournamentDetailViewProps> = ({
                 </div>
 
                 {regType === 'team' && (
-                  <div>
-                    <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Nombre del Equipo</label>
-                    <input 
-                      type="text" 
-                      required
-                      placeholder="Ej: Sentinels Latam"
-                      value={regTeamName}
-                      onChange={(e) => setRegTeamName(e.target.value)}
-                      className="w-full bg-[#F9FAFB] border border-[#E5E7EB] focus:border-black rounded-xl px-3.5 py-2.5 text-xs text-black outline-none"
-                    />
+                  <div className="space-y-3">
+                    {captainTeams.length > 0 && <div><label className="text-xs font-bold text-gray-500 uppercase block mb-1">Equipo que vas a inscribir</label><select value={selectedTeamId} onChange={event => setSelectedTeamId(event.target.value)} className="w-full rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] px-3.5 py-2.5 text-xs outline-none"><option value="new">Crear un equipo nuevo</option>{captainTeams.map(team => <option key={team.id} value={team.id}>{team.name} ({team.tag})</option>)}</select></div>}
+                    {(captainTeams.length === 0 || selectedTeamId === 'new') && <div>
+                      <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Nombre del Equipo</label>
+                      <input type="text" required placeholder="Ej: Sentinels Latam" value={regTeamName} onChange={(e) => setRegTeamName(e.target.value)} className="w-full bg-[#F9FAFB] border border-[#E5E7EB] focus:border-black rounded-xl px-3.5 py-2.5 text-xs text-black outline-none" />
+                    </div>}
+                    <p className="rounded-xl border border-blue-200 bg-blue-50 p-3 text-xs text-blue-950">Solo puedes inscribir equipos donde eres capitán. Si el equipo gana, tú serás la persona responsable de recibir el premio.</p>
                   </div>
                 )}
 
                 <div>
-                  <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Tu GamerTag / ID de Juego</label>
-                  <input 
-                    type="text" 
-                    required
-                    placeholder="Ej: TenZ#NA1"
-                    value={regPlayerIgn}
-                    onChange={(e) => setRegPlayerIgn(e.target.value)}
-                    className="w-full bg-[#F9FAFB] border border-[#E5E7EB] focus:border-black rounded-xl px-3.5 py-2.5 text-xs text-black outline-none"
-                  />
+                  <label className="text-xs font-bold text-gray-500 uppercase block mb-1">{regType === 'team' ? 'Capitán registrado' : 'Jugador registrado'}</label>
+                  <div className="w-full rounded-xl border border-[#E5E7EB] bg-gray-100 px-3.5 py-2.5 text-xs font-bold text-black">{currentUser.gamerTag || currentUser.name} <span className="font-normal text-gray-500">({currentUser.name} · tú)</span></div>
                 </div>
 
                 <div className="flex gap-3 pt-2">
