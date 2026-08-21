@@ -49,6 +49,24 @@ export default function App() {
       email: authUser.email || previous.email,
       avatarUrl: metadata.avatar_url || metadata.picture || previous.avatarUrl,
     }));
+
+    if (supabase) {
+      supabase
+        .from('profiles')
+        .select('full_name, gamer_tag, avatar_url, global_role')
+        .eq('id', authUser.id)
+        .single()
+        .then(({ data, error }) => {
+          if (error || !data) return;
+          setUserProfile(previous => ({
+            ...previous,
+            name: data.full_name || previous.name,
+            gamerTag: data.gamer_tag || previous.gamerTag,
+            avatarUrl: data.avatar_url || previous.avatarUrl,
+            globalRole: data.global_role === 'admin' ? 'admin' : 'user',
+          }));
+        });
+    }
   }, [authUser]);
 
   const handleSignOut = async () => {
