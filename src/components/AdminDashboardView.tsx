@@ -28,7 +28,7 @@ interface AdminDashboardViewProps {
   users: AdminUserSummary[];
   currentUser: UserProfile;
   onNavigate: (view: ViewMode, tournamentId?: string) => void;
-  onDeleteTournament: (tournamentId: string) => { success: boolean; message: string };
+  onDeleteTournament: (tournamentId: string) => Promise<{ success: boolean; message: string }>;
   onUpdateUserStatus: (userId: string, newStatus: 'active' | 'suspended') => void;
   onDeleteUser: (userId: string) => void;
   onDeleteTeam: (teamId: string) => { success: boolean; message: string };
@@ -315,10 +315,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
                     Ver Detalles
                   </button>
                   <button
-                    onClick={() => {
-                      const res = onDeleteTournament(t.id);
-                      showNotification(res.message || 'Torneo eliminado.');
-                    }}
+                    onClick={() => void onDeleteTournament(t.id).then(res => showNotification(res.message || 'Torneo eliminado.'))}
                     className="p-2 rounded-full bg-white border border-[#E5E7EB] text-black hover:bg-gray-100 cursor-pointer"
                     title="Eliminar Torneo"
                   >

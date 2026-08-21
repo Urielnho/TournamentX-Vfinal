@@ -365,6 +365,19 @@ export async function updateTournamentSettings(tournamentId: string, settings: {
   if (error) throw error;
 }
 
+export async function deleteTournament(tournamentId: string) {
+  if (!supabase) throw new Error('Supabase no está configurado.');
+  // count: 'exact' distingue "se borró" de "la política RLS no encontró nada que borrar",
+  // que sin el conteo devolvería éxito sin haber eliminado nada.
+  const { error, count } = await supabase.from('tournaments').delete({ count: 'exact' }).eq('id', tournamentId);
+  if (error) {
+    // transactions y sponsor_contributions referencian el torneo con on delete restrict.
+    if (error.code === '23503') throw new Error('Este torneo tiene pagos o aportaciones registradas, así que no puede eliminarse. Cancélalo en lugar de borrarlo.');
+    throw error;
+  }
+  if (!count) throw new Error('No se eliminó el torneo: ya no existe o no tienes permiso para borrarlo.');
+}
+
 export async function createOrganizerPaymentIntent(tournamentId: string): Promise<string> {
   if (!supabase) throw new Error('Supabase no está configurado.');
   const { data, error } = await supabase.functions.invoke('create-organizer-payment-intent', { body: { tournamentId } });

@@ -22,11 +22,13 @@ import {
   Edit2,
   Trophy,
   Play,
-  RotateCcw
+  RotateCcw,
+  Trash2
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { uploadTournamentBanner } from '../services/supabaseData';
 import { ConfirmDialog } from './ConfirmDialog';
+import { canDeleteTournament, deleteBlockedReason } from '../utils/tournamentAvailability';
 
 interface OrganizerDashboardViewProps {
   activeTournamentId: string;
@@ -45,6 +47,7 @@ interface OrganizerDashboardViewProps {
   onClearBracket: (tournamentId: string) => Promise<void>;
   onScheduleMatch: (matchId: string, scheduledAt: string, streamUrl?: string) => Promise<void>;
   onUpdateTournamentSettings: (tournamentId: string, settings: { title: string; description: string; bannerUrl: string; stream?: Tournament['stream']; organizerPercentage: number; status: Tournament['status'] }) => Promise<void>;
+  onDeleteTournament: (tournamentId: string) => Promise<{ success: boolean; message: string }>;
 }
 
 export const OrganizerDashboardView: React.FC<OrganizerDashboardViewProps> = ({
@@ -64,6 +67,7 @@ export const OrganizerDashboardView: React.FC<OrganizerDashboardViewProps> = ({
   onClearBracket,
   onScheduleMatch,
   onUpdateTournamentSettings,
+  onDeleteTournament,
 }) => {
   const activeSidebarItem = activeSection;
   
@@ -92,6 +96,19 @@ export const OrganizerDashboardView: React.FC<OrganizerDashboardViewProps> = ({
 
   // Tournament settings editable state
   const currentTourn = tournaments.find(t => t.id === activeTournamentId) || tournaments[0];
+  const [confirmDeleteTournament, setConfirmDeleteTournament] = useState(false);
+  const [isDeletingTournament, setIsDeletingTournament] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
+  const handleDeleteTournament = async () => {
+    if (!currentTourn) return;
+    setIsDeletingTournament(true);
+    setDeleteError('');
+    const result = await onDeleteTournament(currentTourn.id);
+    setIsDeletingTournament(false);
+    if (!result.success) { setDeleteError(result.message); return; }
+    // El torneo ya no existe: quedarse aquí dejaría la vista en blanco.
+    onNavigate('tournaments');
+  };
   const [tournTitle, setTournTitle] = useState(currentTourn?.title || 'Torneo Principal');
   const [tournDescription, setTournDescription] = useState(currentTourn?.description || '');
   const [tournBannerUrl, setTournBannerUrl] = useState(currentTourn?.bannerUrl || '');
@@ -722,6 +739,7 @@ export const OrganizerDashboardView: React.FC<OrganizerDashboardViewProps> = ({
 
         {/* TAB 5: CONFIGURACIÓN */}
         {activeSidebarItem === 'configuracion' && (
+          <div className="space-y-6">
           <form onSubmit={handleSaveSettings} className="bg-white p-6 rounded-3xl border border-[#E5E7EB] space-y-4 shadow-xs">
             <div>
               <h3 className="text-sm font-extrabold text-black">Configuración del Torneo</h3>
@@ -784,6 +802,24 @@ export const OrganizerDashboardView: React.FC<OrganizerDashboardViewProps> = ({
               </button>
             </div>
           </form>
+
+          <section className="rounded-3xl border border-red-200 bg-white p-6 shadow-xs">
+            <h3 className="text-sm font-extrabold text-red-700">Zona de peligro</h3>
+            <p className="mt-1 text-xs text-gray-500">Eliminar el torneo borra también sus inscripciones, equipos y partidos. No se puede deshacer.</p>
+            {deleteError && <div role="alert" className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-3 text-xs font-semibold text-red-700">{deleteError}</div>}
+            {currentTourn && !canDeleteTournament(currentTourn)
+              ? <p className="mt-4 rounded-2xl border border-[#E5E7EB] bg-[#F9FAFB] p-3 text-xs font-semibold text-gray-600">{deleteBlockedReason(currentTourn)}</p>
+              : <button
+                  type="button"
+                  onClick={() => setConfirmDeleteTournament(true)}
+                  disabled={isDeletingTournament || !currentTourn}
+                  className="mt-4 inline-flex items-center gap-2 rounded-full border border-red-300 px-5 py-2.5 text-xs font-bold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  {isDeletingTournament ? 'Eliminando…' : 'Eliminar torneo'}
+                </button>}
+          </section>
+          </div>
         )}
 
       </main>
@@ -840,6 +876,8 @@ export const OrganizerDashboardView: React.FC<OrganizerDashboardViewProps> = ({
       )}
 
       <ConfirmDialog open={confirmClearBracket} title="Regenerar llave" message="Se eliminarán todos los partidos y marcadores actuales de esta llave. Esta acción no se puede deshacer." destructive confirmLabel="Eliminar llave" onCancel={()=>setConfirmClearBracket(false)} onConfirm={()=>{setConfirmClearBracket(false);void handleClearBracket();}} />
+
+      <ConfirmDialog open={confirmDeleteTournament} title="Eliminar torneo" message={`Se eliminará “${currentTourn?.title ?? ''}” junto con sus inscripciones, equipos y partidos. Esta acción no se puede deshacer.`} destructive confirmLabel="Sí, eliminar" onCancel={()=>setConfirmDeleteTournament(false)} onConfirm={()=>{setConfirmDeleteTournament(false);void handleDeleteTournament();}} />
 
     </div>
   );

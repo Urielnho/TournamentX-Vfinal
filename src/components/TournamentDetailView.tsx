@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Tournament, Match, Participant, Team, UserProfile, ViewMode } from '../types';
-import { Shield, Trophy, Share2, Sparkles, X, Check, Users, Calendar, ArrowLeft, Clock, Tv, ExternalLink } from 'lucide-react';
+import { Shield, Trophy, Share2, Sparkles, X, Check, Users, Calendar, ArrowLeft, Clock, Tv, ExternalLink, Trash2 } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { isRegistrationOpen, registrationClosedReason } from '../utils/tournamentAvailability';
+import { canDeleteTournament, deleteBlockedReason, isRegistrationOpen, registrationClosedReason } from '../utils/tournamentAvailability';
 import { ConfirmDialog } from './ConfirmDialog';
 import { getTeamRosterAvailability } from '../services/supabaseData';
 
@@ -45,6 +45,7 @@ interface TournamentDetailViewProps {
   onNavigate: (view: ViewMode, tournamentId?: string) => void;
   onRegister: (tournamentId: string, teamName: string, ign: string, type: 'team' | 'individual', teamId?: string, logoFile?: File, memberIds?: string[]) => Promise<'payment_pending' | 'confirmed'>;
   onLeaveRegistration: (tournamentId: string) => Promise<{ refunded: boolean }>;
+  onDeleteTournament: (tournamentId: string) => Promise<{ success: boolean; message: string }>;
 }
 
 export const TournamentDetailView: React.FC<TournamentDetailViewProps> = ({
@@ -55,7 +56,8 @@ export const TournamentDetailView: React.FC<TournamentDetailViewProps> = ({
   currentUser,
   onNavigate,
   onRegister,
-  onLeaveRegistration
+  onLeaveRegistration,
+  onDeleteTournament
 }) => {
   const [activeTab, setActiveTab] = useState<'resumen' | 'bracket' | 'partidos' | 'participantes' | 'reglas' | 'premios'>('resumen');
   const [copiedLink, setCopiedLink] = useState(false);
@@ -74,6 +76,19 @@ export const TournamentDetailView: React.FC<TournamentDetailViewProps> = ({
   const [leavingTournament, setLeavingTournament] = useState(false);
   const [leaveMessage, setLeaveMessage] = useState('');
   const [confirmLeave,setConfirmLeave]=useState(false);
+  const [confirmDelete,setConfirmDelete]=useState(false);
+  const [deletingTournament,setDeletingTournament]=useState(false);
+  const [deleteError,setDeleteError]=useState('');
+
+  const handleDeleteTournament = async () => {
+    setDeletingTournament(true);
+    setDeleteError('');
+    const result = await onDeleteTournament(tournament.id);
+    setDeletingTournament(false);
+    if (!result.success) { setDeleteError(result.message); return; }
+    // El torneo dejó de existir: esta vista ya no tiene nada que mostrar.
+    onNavigate('tournaments');
+  };
   useEffect(()=>{if(!leaveMessage)return;const timer=window.setTimeout(()=>setLeaveMessage(''),5000);return()=>window.clearTimeout(timer);},[leaveMessage]);
 
   const handleLeaveTournament = async () => {
@@ -298,7 +313,7 @@ export const TournamentDetailView: React.FC<TournamentDetailViewProps> = ({
               <div className="bg-white p-6 rounded-3xl border border-[#E5E7EB] space-y-4 shadow-xs">
                 <h3 className="text-base font-extrabold text-black">{tournament.isUserOrganizing ? 'Gestión del torneo' : 'Registro Inmediato'}</h3>
                 {leaveMessage && <div role="status" className="flex items-center justify-between gap-2 rounded-xl border border-gray-200 bg-gray-50 p-3 text-xs font-semibold"><span>{leaveMessage}</span><button aria-label="Cerrar aviso" onClick={()=>setLeaveMessage('')} className="px-2 text-base">×</button></div>}
-                {tournament.isUserOrganizing ? <p className="text-xs text-gray-600">Como organizador administras esta competencia y no puedes inscribirte como participante. Usa el botón “Administrar torneo” de la parte superior para gestionar la competencia.</p> : tournament.isUserRegistered ? <><p className="text-xs text-gray-600">Tu inscripción está activa. Puedes salir antes de que comience el torneo.</p><button onClick={() => setConfirmLeave(true)} disabled={leavingTournament} className="w-full rounded-full border border-red-300 py-3 text-xs font-bold text-red-700 hover:bg-red-50 disabled:opacity-50">{leavingTournament ? 'Procesando…' : 'Salir del torneo'}</button></> : registrationOpen ? <>
+                {tournament.isUserOrganizing ? <><p className="text-xs text-gray-600">Como organizador administras esta competencia y no puedes inscribirte como participante. Usa el botón “Administrar torneo” de la parte superior para gestionar la competencia.</p>{deleteError && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs font-semibold text-red-700">{deleteError}</div>}{canDeleteTournament(tournament) ? <button onClick={() => setConfirmDelete(true)} disabled={deletingTournament} className="flex w-full items-center justify-center gap-2 rounded-full border border-red-300 py-3 text-xs font-bold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"><Trash2 className="h-4 w-4" />{deletingTournament ? 'Eliminando…' : 'Eliminar torneo'}</button> : <p className="text-[11px] font-semibold text-gray-500">{deleteBlockedReason(tournament)}</p>}</> :tournament.isUserRegistered ? <><p className="text-xs text-gray-600">Tu inscripción está activa. Puedes salir antes de que comience el torneo.</p><button onClick={() => setConfirmLeave(true)} disabled={leavingTournament} className="w-full rounded-full border border-red-300 py-3 text-xs font-bold text-red-700 hover:bg-red-50 disabled:opacity-50">{leavingTournament ? 'Procesando…' : 'Salir del torneo'}</button></> : registrationOpen ? <>
                 <p className="text-xs text-gray-600">{tournament.participantType === 'individual' ? 'Regístrate como jugador individual.' : 'Inscribe al equipo del que eres capitán.'}</p>
                 {tournament.participantType === 'team' && <button
                   onClick={() => {
@@ -477,6 +492,7 @@ export const TournamentDetailView: React.FC<TournamentDetailViewProps> = ({
         </div>
       )}
       <ConfirmDialog open={confirmLeave} title="Salir del torneo" message="¿Seguro que quieres salir de este torneo? Si realizaste un pago, se solicitará el reembolso correspondiente en Stripe." destructive confirmLabel="Sí, salir" onCancel={()=>setConfirmLeave(false)} onConfirm={()=>{setConfirmLeave(false);void handleLeaveTournament();}} />
+      <ConfirmDialog open={confirmDelete} title="Eliminar torneo" message={`Se eliminará “${tournament.title}” junto con sus inscripciones, equipos y partidos. Esta acción no se puede deshacer.`} destructive confirmLabel="Sí, eliminar" onCancel={()=>setConfirmDelete(false)} onConfirm={()=>{setConfirmDelete(false);void handleDeleteTournament();}} />
     </div>
   );
 };

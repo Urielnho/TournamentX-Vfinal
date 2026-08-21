@@ -14,7 +14,8 @@ import { AdminDashboardView } from './components/AdminDashboardView';
 import { AuthModal } from './components/AuthModal';
 import { OrganizerFundingPayment } from './components/OrganizerFundingPayment';
 import { supabase } from './lib/supabase';
-import { cancelTournamentRegistration, clearTournamentBracket, createRegistrationPaymentIntent, flushEmailOutbox, generateTournamentBracket, insertRegistration, insertTeam, insertTournament, loadAppData, updateMatchSchedule, updateTournamentSettings, uploadTeamLogo, waitForRegistrationPayment } from './services/supabaseData';
+import { cancelTournamentRegistration, clearTournamentBracket, createRegistrationPaymentIntent, deleteTournament as deleteTournamentRecord, flushEmailOutbox, generateTournamentBracket, insertRegistration, insertTeam, insertTournament, loadAppData, updateMatchSchedule, updateTournamentSettings, uploadTeamLogo, waitForRegistrationPayment } from './services/supabaseData';
+import { canDeleteTournament, deleteBlockedReason } from './utils/tournamentAvailability';
 
 const EMPTY_PROFILE: UserProfile = {
   id: '', name: 'Visitante', gamerTag: 'Visitante', globalRole: 'user', rank: 'Sin clasificación', level: 0,
@@ -241,11 +242,16 @@ export default function App() {
     setUserProfile(profile);
   };
 
-  const deleteTournament = (id: string) => {
+  const deleteTournament = async (id: string) => {
     const tournament = tournaments.find(item => item.id === id);
     if (!tournament) return { success: false, message: 'Torneo no encontrado.' };
-    if (tournament.status === 'live') return { success: false, message: 'No se puede eliminar un torneo en curso.' };
-    void supabase?.from('tournaments').delete().eq('id', id).then(() => refreshData(authUser?.id));
+    if (!canDeleteTournament(tournament)) return { success: false, message: deleteBlockedReason(tournament) };
+    try {
+      await deleteTournamentRecord(id);
+    } catch (error) {
+      return { success: false, message: error instanceof Error ? error.message : 'No se pudo eliminar el torneo.' };
+    }
+    await refreshData(authUser?.id);
     return { success: true, message: `El torneo “${tournament.title}” fue eliminado.` };
   };
   const deleteTeam = (id: string) => {
@@ -266,9 +272,9 @@ export default function App() {
       {loadingData && <div className="mx-auto max-w-4xl px-6 py-4 text-center text-xs font-bold text-gray-500">Cargando datos de TournamentX…</div>}
       {currentView === 'home' && <HomeView tournaments={tournaments} onNavigate={handleNavigate} />}
       {currentView === 'tournaments' && <ExploreTournamentsView tournaments={tournaments} onNavigate={handleNavigate} searchQuery={globalSearchQuery} onSearchQueryChange={setGlobalSearchQuery} />}
-      {currentView === 'tournament-detail' && (currentTournament ? <TournamentDetailView tournament={currentTournament} matches={matches} participants={currentParticipants} teams={teams} currentUser={userProfile} onNavigate={handleNavigate} onRegister={handleRegister} onLeaveRegistration={handleLeaveRegistration} /> : <EmptyState message="Este torneo no existe o ya no está disponible." onBack={() => handleNavigate('tournaments')} />)}
+      {currentView === 'tournament-detail' && (currentTournament ? <TournamentDetailView tournament={currentTournament} matches={matches} participants={currentParticipants} teams={teams} currentUser={userProfile} onNavigate={handleNavigate} onRegister={handleRegister} onLeaveRegistration={handleLeaveRegistration} onDeleteTournament={deleteTournament} /> : <EmptyState message="Este torneo no existe o ya no está disponible." onBack={() => handleNavigate('tournaments')} />)}
       {currentView === 'create-tournament' && authUser && <CreateTournamentWizard onTournamentCreated={handleTournamentCreated} onTournamentPublished={async tournamentId => { await refreshData(authUser.id); setSelectedTournamentId(tournamentId); }} onNavigate={handleNavigate} />}
-      {currentView === 'organizer-dashboard' && currentTournament?.isUserOrganizing && <OrganizerDashboardView activeTournamentId={currentTournament.id} activeSection={organizerSection} transactions={transactions.filter(transaction => transaction.tournamentId === currentTournament.id)} pendingApprovals={pendingApprovals.filter(item => item.tournamentId === currentTournament.id)} tournaments={tournaments.filter(t => t.isUserOrganizing)} matches={matches.filter(match => match.tournamentId === currentTournament.id)} participants={currentParticipants} onNavigate={handleNavigate} onSectionChange={section => handleNavigate('organizer-dashboard', currentTournament.id, section)} onApproveTeam={id => void approveTeam(id)} onRejectTeam={id => void rejectTeam(id)} onUpdateMatchScore={(id, a, b) => void updateScore(id, a, b)} onGenerateBracket={generateBracket} onClearBracket={clearBracket} onScheduleMatch={scheduleMatch} onUpdateTournamentSettings={saveTournamentSettings} />}
+      {currentView === 'organizer-dashboard' && currentTournament?.isUserOrganizing && <OrganizerDashboardView activeTournamentId={currentTournament.id} activeSection={organizerSection} transactions={transactions.filter(transaction => transaction.tournamentId === currentTournament.id)} pendingApprovals={pendingApprovals.filter(item => item.tournamentId === currentTournament.id)} tournaments={tournaments.filter(t => t.isUserOrganizing)} matches={matches.filter(match => match.tournamentId === currentTournament.id)} participants={currentParticipants} onNavigate={handleNavigate} onSectionChange={section => handleNavigate('organizer-dashboard', currentTournament.id, section)} onApproveTeam={id => void approveTeam(id)} onRejectTeam={id => void rejectTeam(id)} onUpdateMatchScore={(id, a, b) => void updateScore(id, a, b)} onGenerateBracket={generateBracket} onClearBracket={clearBracket} onScheduleMatch={scheduleMatch} onUpdateTournamentSettings={saveTournamentSettings} onDeleteTournament={deleteTournament} />}
       {currentView === 'profile' && authUser && <ProfileAthleteView user={userProfile} onUpdateUser={profile => void updateProfile(profile)} onNavigate={handleNavigate} />}
       {currentView === 'teams' && <TeamsView teams={teams} currentUser={userProfile} onCreateTeam={handleCreateTeam} onRefresh={() => refreshData(authUser?.id)} />}
       {currentView === 'matches' && <MatchesView matches={matches} onNavigate={handleNavigate} onManageTournament={tournamentId=>handleNavigate('organizer-dashboard',tournamentId,'partidos')} />}
