@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Tournament, Match, Participant, ViewMode } from '../types';
 import { Shield, Trophy, Share2, Sparkles, X, Check, Users, Calendar, ArrowLeft, Clock } from 'lucide-react';
 import confetti from 'canvas-confetti';
+import { isRegistrationOpen, registrationClosedReason } from '../utils/tournamentAvailability';
 
 interface TournamentDetailViewProps {
   tournament: Tournament;
@@ -56,6 +57,7 @@ export const TournamentDetailView: React.FC<TournamentDetailViewProps> = ({
 
   const tournamentMatches = matches.filter(m => m.tournamentId === tournament.id);
   const totalPrizePool = tournament.basePrizePool + tournament.sponsors.reduce((total, sponsor) => total + sponsor.contribution, 0);
+  const registrationOpen = isRegistrationOpen(tournament);
 
   const detailTabs = [
     { id: 'resumen', label: 'Resumen' },
@@ -82,10 +84,10 @@ export const TournamentDetailView: React.FC<TournamentDetailViewProps> = ({
           <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
             <div className="space-y-2">
               <div className="flex flex-wrap items-center gap-2">
-                {tournament.status === 'live' ? (
+                {!registrationOpen ? (
                   <span className="px-3 py-1 rounded-full bg-white text-black text-[11px] font-black shadow-xs flex items-center gap-1.5">
                     <span className="w-2 h-2 rounded-full bg-black animate-ping" />
-                    EN VIVO
+                    {tournament.status === 'live' ? 'EN VIVO' : 'INSCRIPCIONES CERRADAS'}
                   </span>
                 ) : (
                   <span className="px-3 py-1 rounded-full bg-white text-black text-[11px] font-bold shadow-xs">
@@ -121,7 +123,7 @@ export const TournamentDetailView: React.FC<TournamentDetailViewProps> = ({
               >
                 <Shield className="h-4 w-4" />
                 Administrar torneo
-              </button> : <button 
+              </button> : registrationOpen ? <button
                 onClick={() => {
                   setRegType('team');
                   setShowRegisterModal(true);
@@ -130,7 +132,7 @@ export const TournamentDetailView: React.FC<TournamentDetailViewProps> = ({
               >
                 <Sparkles className="w-4 h-4 text-black" />
                 <span>Inscribirme</span>
-              </button>}
+              </button> : <span className="rounded-full border border-white/30 px-5 py-2.5 text-xs font-bold text-white">Solo vista</span>}
             </div>
           </div>
         </div>
@@ -163,6 +165,7 @@ export const TournamentDetailView: React.FC<TournamentDetailViewProps> = ({
 
       {/* Main Content & Tabs */}
       <div className="max-w-[1280px] mx-auto px-4 md:px-8 py-8 flex flex-col gap-6">
+        {!registrationOpen && tournament.status !== 'completed' && <div role="status" className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4"><p className="text-sm font-black text-amber-900">Las inscripciones han terminado</p><p className="mt-1 text-xs text-amber-800">{registrationClosedReason(tournament)} Ahora puedes seguir el torneo, consultar participantes, partidos y resultados.</p></div>}
         {/* Navigation Tabs */}
         <div className="flex flex-wrap gap-2 border-b border-[#E5E7EB] pb-3">
           {detailTabs.map(tab => (

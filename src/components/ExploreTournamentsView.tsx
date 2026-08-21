@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Tournament, ViewMode } from '../types';
 import { Search, Plus, Trophy, Users, ArrowRight, Calendar, Filter } from 'lucide-react';
+import { isRegistrationOpen, isViewOnlyTournament } from '../utils/tournamentAvailability';
 
 interface ExploreTournamentsViewProps {
   tournaments: Tournament[];
@@ -11,7 +12,7 @@ export const ExploreTournamentsView: React.FC<ExploreTournamentsViewProps> = ({
   tournaments, 
   onNavigate 
 }) => {
-  type TournamentTab = 'explorar' | 'participando' | 'organizando' | 'historial';
+  type TournamentTab = 'explorar' | 'en_vivo' | 'participando' | 'organizando' | 'historial';
   const [activeTab, setActiveTab] = useState<TournamentTab>('explorar');
   const [searchQuery, setSearchQuery] = useState('');
   const [sportFilter, setSportFilter] = useState('All Sports');
@@ -31,6 +32,8 @@ export const ExploreTournamentsView: React.FC<ExploreTournamentsViewProps> = ({
   const filteredTournaments = useMemo(() => {
     return tournaments.filter(t => {
       // Tab filter
+      if (activeTab === 'explorar' && !isRegistrationOpen(t)) return false;
+      if (activeTab === 'en_vivo' && !isViewOnlyTournament(t)) return false;
       if (activeTab === 'participando' && !t.isUserRegistered) return false;
       if (activeTab === 'organizando' && !t.isUserOrganizing) return false;
       if (activeTab === 'historial' && t.status !== 'completed') return false;
@@ -53,8 +56,8 @@ export const ExploreTournamentsView: React.FC<ExploreTournamentsViewProps> = ({
       if (sportFilter === 'Physical Sports' && t.category !== 'sports') return false;
 
       // Status filter
-      if (statusFilter === 'Open' && t.status !== 'open') return false;
-      if (statusFilter === 'Live' && t.status !== 'live') return false;
+      if (statusFilter === 'Open' && !isRegistrationOpen(t)) return false;
+      if (statusFilter === 'Live' && !isViewOnlyTournament(t)) return false;
       if (statusFilter === 'Completed' && t.status !== 'completed') return false;
 
       return true;
@@ -62,7 +65,8 @@ export const ExploreTournamentsView: React.FC<ExploreTournamentsViewProps> = ({
   }, [tournaments, activeTab, searchQuery, sportFilter, statusFilter, selectedDiscipline]);
 
   const navTabs: { id: TournamentTab; label: string; count: number }[] = [
-    { id: 'explorar', label: 'Explorar Torneos', count: tournaments.length },
+    { id: 'explorar', label: 'Inscripciones abiertas', count: tournaments.filter(t => isRegistrationOpen(t)).length },
+    { id: 'en_vivo', label: 'En vivo y para ver', count: tournaments.filter(t => isViewOnlyTournament(t)).length },
     { id: 'participando', label: 'Mis Inscripciones', count: tournaments.filter(t => t.isUserRegistered).length },
     { id: 'organizando', label: 'Mis Torneos', count: tournaments.filter(t => t.isUserOrganizing).length },
     { id: 'historial', label: 'Historial', count: tournaments.filter(t => t.status === 'completed').length },
@@ -194,10 +198,10 @@ export const ExploreTournamentsView: React.FC<ExploreTournamentsViewProps> = ({
                 <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
 
                 <div className="absolute top-3 left-3">
-                  {t.status === 'live' ? (
+                  {!isRegistrationOpen(t) ? (
                     <span className="px-2.5 py-1 rounded-full bg-white text-black text-[11px] font-black shadow-xs flex items-center gap-1.5">
                       <span className="w-1.5 h-1.5 rounded-full bg-black animate-ping" />
-                      EN VIVO
+                      {t.status === 'live' ? 'EN VIVO' : 'INSCRIPCIONES CERRADAS'}
                     </span>
                   ) : (
                     <span className="px-2.5 py-1 rounded-full bg-black text-white text-[11px] font-bold shadow-xs">
@@ -242,7 +246,7 @@ export const ExploreTournamentsView: React.FC<ExploreTournamentsViewProps> = ({
                   </div>
 
                   <span className="text-xs font-bold text-black group-hover:underline flex items-center gap-1">
-                    <span>Ver Bracket</span>
+                    <span>{isRegistrationOpen(t) ? 'Inscribirme' : 'Ver torneo'}</span>
                     <ArrowRight className="w-3 h-3" />
                   </span>
                 </div>
