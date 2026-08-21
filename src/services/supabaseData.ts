@@ -50,6 +50,41 @@ export interface AppDatabaseData {
   users: AdminUserSummary[];
 }
 
+export interface TeamInvitationSummary { id: string; token: string; teamId: string; teamName: string; expiresAt: string; }
+export interface TeamJoinRequestSummary { id: string; teamId: string; teamName: string; userId: string; userName: string; gamerTag: string; }
+
+export async function loadTeamCollaboration() {
+  if (!supabase) return { invitations: [] as TeamInvitationSummary[], requests: [] as TeamJoinRequestSummary[] };
+  const { data: authData } = await supabase.auth.getUser();
+  if (!authData.user) return { invitations: [] as TeamInvitationSummary[], requests: [] as TeamJoinRequestSummary[] };
+  const [inviteResult, requestResult] = await Promise.all([
+    supabase.from('team_invitations').select('id,token,team_id,expires_at,team:teams(name)').eq('invited_user_id', authData.user.id).eq('status', 'pending').gt('expires_at', new Date().toISOString()),
+    supabase.from('team_join_requests').select('id,team_id,user_id,team:teams(name,captain_id),profile:profiles!team_join_requests_user_id_fkey(full_name,gamer_tag)').eq('status', 'pending'),
+  ]);
+  if (inviteResult.error) throw inviteResult.error;
+  if (requestResult.error) throw requestResult.error;
+  return {
+    invitations: (inviteResult.data || []).map((row: any) => ({ id: row.id, token: row.token, teamId: row.team_id, teamName: row.team?.name || 'Equipo', expiresAt: row.expires_at })),
+    requests: (requestResult.data || []).filter((row: any) => row.team?.captain_id === authData.user?.id).map((row: any) => ({ id: row.id, teamId: row.team_id, teamName: row.team?.name || 'Equipo', userId: row.user_id, userName: row.profile?.full_name || 'Jugador', gamerTag: row.profile?.gamer_tag || '' })),
+  };
+}
+
+async function teamRpc(name: string, args: Record<string, unknown>) {
+  if (!supabase) throw new Error('Supabase no está configurado.');
+  const { data, error } = await supabase.rpc(name, args);
+  if (error) throw error;
+  return data;
+}
+
+export const inviteTeamMember = (teamId: string, gamerTag: string) => teamRpc('invite_team_member', { target_team_id: teamId, target_gamer_tag: gamerTag });
+export const createTeamInviteLink = async (teamId: string) => String(await teamRpc('create_team_invite_link', { target_team_id: teamId }));
+export const acceptTeamInvitation = (token: string) => teamRpc('accept_team_invitation', { invite_token: token });
+export const rejectTeamInvitation = (invitationId: string) => teamRpc('reject_team_invitation', { invitation_id: invitationId });
+export const requestToJoinTeam = (teamId: string) => teamRpc('request_to_join_team', { target_team_id: teamId });
+export const respondTeamJoinRequest = (requestId: string, approve: boolean) => teamRpc('respond_team_join_request', { target_request_id: requestId, approve });
+export const removeTeamMember = (teamId: string, userId: string) => teamRpc('remove_team_member', { target_team_id: teamId, target_user_id: userId });
+export const leaveTeam = (teamId: string) => teamRpc('leave_team', { target_team_id: teamId });
+
 export async function loadAppData(userId?: string): Promise<AppDatabaseData> {
   if (!supabase) return { tournaments: [], teams: [], participants: [], matches: [], transactions: [], pendingApprovals: [], users: [] };
 

@@ -253,8 +253,6 @@ export default function App() {
 
   const currentTournament = tournaments.find(tournament => tournament.id === selectedTournamentId);
   const currentParticipants = participants.filter(participant => !participant.tournamentId || participant.tournamentId === selectedTournamentId);
-  const teamCards: Participant[] = teams.map(team => ({ id: team.id, tournamentId: team.tournamentId, name: team.name, tag: team.tag, logo: team.logo, captain: team.captainName, captainId: team.captainId, memberIds: team.members.map(member => member.id), membersCount: team.members.length, status: team.status === 'confirmed' ? 'confirmed' : 'pending' }));
-
   return <div className="flex min-h-screen flex-col bg-white text-black selection:bg-black selection:text-white">
     <Navbar currentView={currentView} onNavigate={handleNavigate} user={userProfile} authUser={authUser} onSignIn={() => setShowAuthModal(true)} onSignOut={handleSignOut} searchQuery={globalSearchQuery} onSearchQueryChange={setGlobalSearchQuery} onSearchSubmit={() => handleNavigate('tournaments')} />
     <main className="flex-1 bg-[#f5f6f8] text-black">
@@ -267,7 +265,7 @@ export default function App() {
       {currentView === 'create-tournament' && authUser && <CreateTournamentWizard onTournamentCreated={handleTournamentCreated} onTournamentPublished={async tournamentId => { await refreshData(authUser.id); setSelectedTournamentId(tournamentId); }} onNavigate={handleNavigate} />}
       {currentView === 'organizer-dashboard' && currentTournament?.isUserOrganizing && <OrganizerDashboardView activeTournamentId={currentTournament.id} activeSection={organizerSection} transactions={transactions.filter(transaction => transaction.tournamentId === currentTournament.id)} pendingApprovals={pendingApprovals.filter(item => item.tournamentId === currentTournament.id)} tournaments={tournaments.filter(t => t.isUserOrganizing)} matches={matches.filter(match => match.tournamentId === currentTournament.id)} participants={currentParticipants} onNavigate={handleNavigate} onSectionChange={section => handleNavigate('organizer-dashboard', currentTournament.id, section)} onApproveTeam={id => void approveTeam(id)} onRejectTeam={id => void rejectTeam(id)} onUpdateMatchScore={(id, a, b) => void updateScore(id, a, b)} onUpdateTournamentSettings={saveTournamentSettings} />}
       {currentView === 'profile' && authUser && <ProfileAthleteView user={userProfile} onUpdateUser={profile => void updateProfile(profile)} onNavigate={handleNavigate} />}
-      {currentView === 'teams' && <TeamsView participants={teamCards} currentUser={userProfile} onNavigate={handleNavigate} onCreateTeam={handleCreateTeam} />}
+      {currentView === 'teams' && <TeamsView teams={teams} currentUser={userProfile} onCreateTeam={handleCreateTeam} onRefresh={() => refreshData(authUser?.id)} />}
       {currentView === 'matches' && <MatchesView matches={matches} onNavigate={handleNavigate} />}
       {currentView === 'admin-panel' && userProfile.globalRole === 'admin' && <AdminDashboardView tournaments={tournaments} teams={teams} transactions={transactions} users={users} currentUser={userProfile} onNavigate={handleNavigate} onDeleteTournament={deleteTournament} onUpdateUserStatus={() => undefined} onDeleteUser={() => undefined} onDeleteTeam={deleteTeam} />}
     </main>

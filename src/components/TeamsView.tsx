@@ -1,211 +1,46 @@
-import React, { useState } from 'react';
-import { Participant, UserProfile, ViewMode } from '../types';
-import { Plus, X, Search, Users, Trophy, Shield, Check } from 'lucide-react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Team, UserProfile } from '../types';
+import { Plus, Search, Users, Copy, UserPlus, Trash2, LogOut } from 'lucide-react';
 import confetti from 'canvas-confetti';
+import { acceptTeamInvitation, createTeamInviteLink, inviteTeamMember, leaveTeam, loadTeamCollaboration, rejectTeamInvitation, removeTeamMember, requestToJoinTeam, respondTeamJoinRequest, TeamInvitationSummary, TeamJoinRequestSummary } from '../services/supabaseData';
 
-interface TeamsViewProps {
-  participants: Participant[];
-  currentUser: UserProfile;
-  onNavigate: (view: ViewMode, tournamentId?: string) => void;
-  onCreateTeam: (name: string, tag: string, logoFile?: File) => Promise<void>;
-}
+interface TeamsViewProps { teams: Team[]; currentUser: UserProfile; onCreateTeam: (name: string, tag: string, logoFile?: File) => Promise<void>; onRefresh: () => Promise<void>; }
+type Tab = 'mine' | 'managed' | 'explore' | 'invites' | 'requests';
 
-export const TeamsView: React.FC<TeamsViewProps> = ({
-  participants,
-  currentUser,
-  onNavigate,
-  onCreateTeam
-}) => {
-  const [activeTab, setActiveTab] = useState<'mine' | 'managed' | 'invites' | 'history'>('mine');
+export const TeamsView: React.FC<TeamsViewProps> = ({ teams, currentUser, onCreateTeam, onRefresh }) => {
+  const [activeTab, setActiveTab] = useState<Tab>('mine');
   const [search, setSearch] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
   const [teamName, setTeamName] = useState('');
   const [teamTag, setTeamTag] = useState('');
   const [teamLogo, setTeamLogo] = useState<File | null>(null);
-  const [createError, setCreateError] = useState('');
+  const [inviteQuery, setInviteQuery] = useState('');
+  const [invitations, setInvitations] = useState<TeamInvitationSummary[]>([]);
+  const [requests, setRequests] = useState<TeamJoinRequestSummary[]>([]);
+  const [notice, setNotice] = useState('');
+  const [error, setError] = useState('');
 
-  const userTeams = participants.filter(team => team.captainId === currentUser.id || team.memberIds?.includes(currentUser.id));
-  const visibleTeams = activeTab === 'managed'
-    ? userTeams.filter(team => team.captainId === currentUser.id)
-    : userTeams;
-  const filteredTeams = visibleTeams.filter(team =>
-    team.name.toLowerCase().includes(search.toLowerCase()) ||
-    team.tag.toLowerCase().includes(search.toLowerCase())
-  );
+  const reloadCollaboration = useCallback(async () => { if (!currentUser.id) return; try { const data = await loadTeamCollaboration(); setInvitations(data.invitations); setRequests(data.requests); } catch (reason) { setError(reason instanceof Error ? reason.message : 'No se pudieron cargar las invitaciones.'); } }, [currentUser.id]);
+  useEffect(() => { void reloadCollaboration(); }, [reloadCollaboration]);
+  useEffect(() => { if (selectedTeam) setSelectedTeam(teams.find(team => team.id === selectedTeam.id) || null); }, [teams, selectedTeam?.id]);
+  useEffect(() => { const token = new URLSearchParams(window.location.search).get('invite'); if (!token || !currentUser.id) return; void acceptTeamInvitation(token).then(async () => { setNotice('Invitación aceptada. Ya formas parte del equipo.'); window.history.replaceState({}, '', '/equipos'); await onRefresh(); await reloadCollaboration(); }).catch(reason => setError(reason instanceof Error ? reason.message : 'No se pudo aceptar el enlace.')); }, [currentUser.id, onRefresh, reloadCollaboration]);
 
-  const handleCreate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!teamName.trim() || !teamTag.trim()) return;
-    setCreateError('');
-    try {
-      await onCreateTeam(teamName.trim(), teamTag.toUpperCase(), teamLogo || undefined);
-      setShowCreateModal(false);
-      setTeamName('');
-      setTeamTag('');
-      setTeamLogo(null);
-      confetti({ particleCount: 50, spread: 50 });
-    } catch (error) {
-      setCreateError(error instanceof Error ? error.message : 'No se pudo crear el equipo.');
-    }
-  };
+  const userTeams = useMemo(() => teams.filter(team => team.captainId === currentUser.id || team.members.some(member => member.id === currentUser.id)), [teams, currentUser.id]);
+  const visibleTeams = activeTab === 'managed' ? userTeams.filter(team => team.captainId === currentUser.id) : activeTab === 'explore' ? teams.filter(team => !userTeams.some(mine => mine.id === team.id)) : userTeams;
+  const filteredTeams = visibleTeams.filter(team => `${team.name} ${team.tag} ${team.captainName}`.toLowerCase().includes(search.toLowerCase()));
+  const runAction = async (action: () => Promise<unknown>, success: string) => { setError(''); setNotice(''); try { await action(); setNotice(success); await onRefresh(); await reloadCollaboration(); } catch (reason) { setError(reason instanceof Error ? reason.message : 'No se pudo completar la acción.'); } };
+  const handleCreate = async (event: React.FormEvent) => { event.preventDefault(); await runAction(async () => { await onCreateTeam(teamName.trim(), teamTag.toUpperCase(), teamLogo || undefined); setShowCreateModal(false); setTeamName(''); setTeamTag(''); setTeamLogo(null); confetti({ particleCount: 40, spread: 50 }); }, 'Equipo creado correctamente.'); };
 
-  return (
-    <div className="w-full max-w-[1280px] mx-auto px-4 md:px-8 py-8 flex flex-col gap-6 font-['Golos_Text',sans-serif] text-black">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row justify-between md:items-center gap-4 border-b border-[#E5E7EB] pb-6">
-        <div>
-          <span className="text-xs font-bold uppercase tracking-widest text-gray-500">
-            Comunidad y Escuadras
-          </span>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-black mt-0.5">
-            Equipos y Rosters
-          </h1>
-          <p className="text-xs sm:text-sm text-gray-600 mt-1">
-            Administra tus equipos temporales, integrantes e invitaciones dentro de cada torneo.
-          </p>
-        </div>
+  return <div className="mx-auto flex w-full max-w-[1280px] flex-col gap-6 px-4 py-8 text-black md:px-8">
+    <div className="flex flex-col justify-between gap-4 border-b border-gray-200 pb-6 md:flex-row md:items-center"><div><span className="text-xs font-bold uppercase tracking-widest text-gray-500">Comunidad y escuadras</span><h1 className="text-3xl font-extrabold">Equipos y Rosters</h1><p className="mt-1 text-sm text-gray-600">Explora equipos, administra integrantes e invitaciones y reutiliza tu roster en distintos torneos.</p></div><button onClick={() => setShowCreateModal(true)} className="flex w-fit items-center gap-2 rounded-full bg-black px-5 py-3 text-xs font-bold uppercase text-white"><Plus className="h-4 w-4" />Crear equipo</button></div>
+    {(notice || error) && <p className={`rounded-2xl border p-3 text-xs font-semibold ${error ? 'border-red-200 bg-red-50 text-red-700' : 'border-green-200 bg-green-50 text-green-800'}`}>{error || notice}</p>}
+    <div className="flex gap-2 overflow-x-auto border-b border-gray-200 pb-3">{([['mine','Mis equipos'],['managed','Donde soy capitán'],['explore','Explorar equipos'],['invites',`Invitaciones (${invitations.length})`],['requests',`Solicitudes (${requests.length})`]] as [Tab,string][]).map(([id,label]) => <button key={id} onClick={() => setActiveTab(id)} className={`shrink-0 rounded-full px-4 py-2 text-xs font-bold ${activeTab===id?'bg-black text-white':'border border-gray-200 bg-white text-gray-600'}`}>{label}</button>)}</div>
+    {(['mine','managed','explore'] as Tab[]).includes(activeTab) && <><div className="flex items-center gap-3 rounded-2xl border bg-white p-3"><Search className="h-4 w-4 text-gray-400"/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar equipo, tag o capitán..." className="w-full bg-transparent text-xs outline-none"/></div><div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">{filteredTeams.map(team => { const captain = team.captainId===currentUser.id; const member = team.members.some(item=>item.id===currentUser.id); return <div key={team.id} className="flex flex-col gap-4 rounded-3xl border bg-white p-5 hover:border-black"><button onClick={()=>setSelectedTeam(team)} className="flex items-center gap-3 text-left"><div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl border bg-gray-50 font-black">{team.logo?<img src={team.logo} alt={`Logo de ${team.name}`} className="h-full w-full object-cover"/>:team.tag}</div><div className="min-w-0"><h3 className="truncate text-sm font-bold">{team.name}</h3><p className="truncate text-[11px] text-gray-500">Capitán: {team.captainName}</p></div></button><div className="flex items-center justify-between border-t pt-3 text-[11px]"><span className="flex items-center gap-1 text-gray-500"><Users className="h-4 w-4"/>{team.members.length} miembros</span>{captain?<button onClick={()=>setSelectedTeam(team)} className="font-bold">Administrar</button>:member?<button onClick={()=>void runAction(()=>leaveTeam(team.id),'Saliste del equipo.')} className="font-bold text-red-600">Salir</button>:<button onClick={()=>void runAction(()=>requestToJoinTeam(team.id),'Solicitud enviada al capitán.')} className="font-bold">Solicitar unirme</button>}</div></div>; })}</div>{filteredTeams.length===0&&<p className="rounded-2xl border bg-gray-50 p-8 text-center text-xs font-bold">No hay equipos en esta sección.</p>}</>}
+    {activeTab==='invites' && <div className="space-y-3">{invitations.map(invite=><div key={invite.id} className="flex items-center justify-between rounded-2xl border bg-white p-4 text-xs"><div><b>{invite.teamName}</b><p className="text-gray-500">Vence {new Date(invite.expiresAt).toLocaleDateString('es-MX')}</p></div><div className="flex gap-2"><button onClick={()=>void runAction(()=>acceptTeamInvitation(invite.token),'Invitación aceptada.')} className="rounded-full bg-black px-4 py-2 font-bold text-white">Aceptar</button><button onClick={()=>void runAction(()=>rejectTeamInvitation(invite.id),'Invitación rechazada.')} className="rounded-full border px-4 py-2 font-bold">Rechazar</button></div></div>)}{invitations.length===0&&<p className="rounded-2xl border bg-gray-50 p-8 text-center text-xs font-bold">No tienes invitaciones pendientes.</p>}</div>}
+    {activeTab==='requests' && <div className="space-y-3">{requests.map(request=><div key={request.id} className="flex items-center justify-between rounded-2xl border bg-white p-4 text-xs"><div><b>{request.gamerTag||request.userName}</b><p className="text-gray-500">Quiere unirse a {request.teamName}</p></div><div className="flex gap-2"><button onClick={()=>void runAction(()=>respondTeamJoinRequest(request.id,true),'Jugador agregado.')} className="rounded-full bg-black px-4 py-2 font-bold text-white">Aceptar</button><button onClick={()=>void runAction(()=>respondTeamJoinRequest(request.id,false),'Solicitud rechazada.')} className="rounded-full border px-4 py-2 font-bold">Rechazar</button></div></div>)}{requests.length===0&&<p className="rounded-2xl border bg-gray-50 p-8 text-center text-xs font-bold">No tienes solicitudes pendientes.</p>}</div>}
 
-        <button 
-          onClick={() => setShowCreateModal(true)}
-          className="px-5 py-2.5 rounded-full bg-black text-white font-bold text-xs uppercase tracking-wider hover:bg-gray-800 active:scale-95 transition-all shadow-xs flex items-center gap-2 w-fit cursor-pointer"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Crear equipo para un torneo</span>
-        </button>
-      </div>
-
-      <div className="flex gap-2 overflow-x-auto border-b border-[#E5E7EB] pb-3">
-        {[
-          ['mine', 'Todos mis equipos'], ['managed', 'Solo donde soy capitán'], ['invites', 'Invitaciones'], ['history', 'Historial']
-        ].map(([id, label]) => <button key={id} onClick={() => setActiveTab(id as typeof activeTab)} className={`shrink-0 rounded-full px-4 py-2 text-xs font-bold ${activeTab === id ? 'bg-black text-white' : 'border border-gray-200 bg-white text-gray-600'}`}>{label}{id === 'invites' && <span className="ml-2 rounded-full bg-black px-2 py-0.5 text-[10px] text-white">0</span>}</button>)}
-      </div>
-
-      {/* Search Bar */}
-      <div className="bg-white p-3 rounded-2xl border border-[#E5E7EB] flex items-center gap-3 shadow-xs">
-        <Search className="w-4 h-4 text-gray-400 ml-1" />
-        <input 
-          type="text" 
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Buscar equipo por nombre o tag..."
-          className="w-full bg-transparent text-xs text-black placeholder-gray-400 outline-none"
-        />
-      </div>
-
-      {activeTab === 'invites' && <div className="rounded-2xl border border-[#E5E7EB] bg-[#F9FAFB] p-6 text-center text-xs font-bold">No tienes invitaciones pendientes.</div>}
-
-      {activeTab === 'history' && <div className="rounded-2xl border border-[#E5E7EB] bg-[#F9FAFB] p-6 text-center text-xs font-bold">No hay equipos históricos registrados.</div>}
-
-      {activeTab === 'managed' && filteredTeams.length === 0 && <div className="rounded-2xl border border-[#E5E7EB] bg-[#F9FAFB] p-6 text-center text-xs font-bold">Todavía no eres capitán de ningún equipo.</div>}
-
-      {/* Teams Grid */}
-      {activeTab !== 'invites' && activeTab !== 'history' &&
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {filteredTeams.map((team) => (
-          <div 
-            key={team.id}
-            className="bg-white rounded-3xl border border-[#E5E7EB] p-5 flex flex-col justify-between gap-4 hover:border-black hover:shadow-md transition-all"
-          >
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 overflow-hidden rounded-2xl bg-[#F9FAFB] text-black font-black text-sm flex items-center justify-center border border-[#E5E7EB] shrink-0">
-                {team.logo ? <img src={team.logo} alt={`Logo de ${team.name}`} className="h-full w-full object-cover" /> : team.tag}
-              </div>
-
-              <div className="overflow-hidden flex-1 text-xs">
-                <h3 className="font-bold text-black truncate text-sm">{team.name}</h3>
-                <p className="text-[11px] text-gray-500 truncate mt-0.5">Capitán: {team.captain || 'Oficial'}</p>
-              </div>
-            </div>
-
-            <div className="flex justify-between items-center pt-3 border-t border-[#F3F4F6] text-xs">
-              <span className="text-[11px] text-gray-500 flex items-center gap-1 font-medium">
-                <Users className="w-3.5 h-3.5" />
-                <span>{team.membersCount ?? 0} Atletas</span>
-              </span>
-
-              <span className="px-2.5 py-0.5 rounded-full bg-black text-white font-bold text-[10px]">
-                CONFIRMADO
-              </span>
-            </div>
-          </div>
-        ))}
-      </div>}
-
-      {/* Create Team Modal */}
-      {showCreateModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
-          <div className="bg-white text-black rounded-3xl max-w-md w-full p-6 border border-[#E5E7EB] shadow-2xl relative">
-            <button
-              onClick={() => setShowCreateModal(false)}
-              className="absolute top-4 right-4 text-gray-400 hover:text-black text-sm font-bold cursor-pointer"
-            >
-              ✕
-            </button>
-
-            <h3 className="text-lg font-extrabold text-black mb-1">Crear equipo temporal</h3>
-            <p className="text-xs text-gray-500 mb-4">Podrás reutilizar este equipo e inscribir distintos rosters en varios torneos.</p>
-
-            <form onSubmit={handleCreate} className="space-y-4 text-xs">
-              {createError && <p className="rounded-xl border border-red-200 bg-red-50 p-3 font-semibold text-red-700">{createError}</p>}
-              <div>
-                <label className="font-bold text-gray-600 uppercase block mb-1">Nombre del Equipo</label>
-                <input 
-                  type="text" 
-                  required
-                  placeholder="Ej: Cloud9 Apex"
-                  value={teamName}
-                  onChange={(e) => setTeamName(e.target.value)}
-                  className="w-full bg-[#F9FAFB] border border-[#E5E7EB] focus:border-black rounded-xl px-3.5 py-2.5 text-black outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="font-bold text-gray-600 uppercase block mb-1">Tag / Siglas (3-5 Letras)</label>
-                <input 
-                  type="text" 
-                  required
-                  maxLength={5}
-                  placeholder="Ej: C9"
-                  value={teamTag}
-                  onChange={(e) => setTeamTag(e.target.value.toUpperCase())}
-                  className="w-full bg-[#F9FAFB] border border-[#E5E7EB] focus:border-black rounded-xl px-3.5 py-2.5 text-black uppercase font-bold outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="font-bold text-gray-600 uppercase block mb-1">Capitán / Líder</label>
-                <div className="w-full rounded-xl border border-[#E5E7EB] bg-gray-100 px-3.5 py-2.5 font-bold text-black">{currentUser.gamerTag || currentUser.name} <span className="font-normal text-gray-500">({currentUser.name} · tú)</span></div>
-                <p className="mt-1.5 text-[11px] text-gray-500">Tu cuenta quedará registrada automáticamente como capitán y responsable del premio.</p>
-              </div>
-
-              <div>
-                <label className="font-bold text-gray-600 uppercase block mb-1">Logo del equipo (opcional)</label>
-                <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-dashed border-gray-300 bg-[#F9FAFB] p-3 hover:border-black">
-                  {teamLogo ? <img src={URL.createObjectURL(teamLogo)} alt="Vista previa del logo" className="h-12 w-12 rounded-xl object-cover" /> : <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-black font-black text-white">{teamTag || 'LOGO'}</div>}
-                  <span className="text-[11px] text-gray-600">{teamLogo ? teamLogo.name : 'Seleccionar JPG, PNG o WebP · máximo 2 MB'}</span>
-                  <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={event => setTeamLogo(event.target.files?.[0] || null)} />
-                </label>
-              </div>
-
-              <div className="flex gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowCreateModal(false)}
-                  className="flex-1 py-2.5 rounded-full border border-[#E5E7EB] text-gray-600 hover:bg-[#F3F4F6] font-semibold cursor-pointer"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 py-2.5 rounded-full bg-black text-white font-bold hover:bg-gray-800 active:scale-95 transition-all shadow-xs cursor-pointer"
-                >
-                  Crear Escuadra
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-    </div>
-  );
+    {selectedTeam && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"><div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-3xl bg-white p-6"><button onClick={()=>setSelectedTeam(null)} className="float-right text-xl">×</button><h2 className="text-xl font-black">{selectedTeam.name}</h2><p className="text-xs text-gray-500">Capitán: {selectedTeam.captainName}</p><h3 className="mt-6 text-xs font-black uppercase">Miembros</h3><div className="mt-2 space-y-2">{selectedTeam.members.map(member=><div key={member.id} className="flex items-center justify-between rounded-xl bg-gray-50 p-3 text-xs"><div><b>{member.gamerTag||member.name}</b><p className="text-gray-500">{member.role==='captain'?'Capitán':member.name}</p></div>{selectedTeam.captainId===currentUser.id&&member.id!==currentUser.id&&<button onClick={()=>void runAction(()=>removeTeamMember(selectedTeam.id,member.id),'Miembro retirado del equipo.')} title="Retirar miembro" className="text-red-600"><Trash2 className="h-4 w-4"/></button>}</div>)}</div>{selectedTeam.captainId===currentUser.id?<div className="mt-6 space-y-3 border-t pt-5"><h3 className="text-xs font-black uppercase">Invitar miembro</h3><div className="flex gap-2"><input value={inviteQuery} onChange={e=>setInviteQuery(e.target.value)} placeholder="GamerTag o correo exacto" className="min-w-0 flex-1 rounded-xl border p-3 text-xs"/><button onClick={()=>void runAction(()=>inviteTeamMember(selectedTeam.id,inviteQuery),'Invitación enviada.')} className="rounded-xl bg-black px-4 text-white"><UserPlus className="h-4 w-4"/></button></div><button onClick={()=>void runAction(async()=>{const token=await createTeamInviteLink(selectedTeam.id);await navigator.clipboard.writeText(`${window.location.origin}/equipos?invite=${token}`);},'Enlace copiado. Vence en 7 días.')} className="flex w-full items-center justify-center gap-2 rounded-xl border p-3 text-xs font-bold"><Copy className="h-4 w-4"/>Copiar enlace de invitación</button></div>:<button onClick={()=>void runAction(()=>leaveTeam(selectedTeam.id),'Saliste del equipo.')} className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl border border-red-200 p-3 text-xs font-bold text-red-700"><LogOut className="h-4 w-4"/>Abandonar equipo</button>}</div></div>}
+    {showCreateModal&&<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"><div className="w-full max-w-md rounded-3xl bg-white p-6"><button onClick={()=>setShowCreateModal(false)} className="float-right text-xl">×</button><h3 className="text-lg font-black">Crear equipo reutilizable</h3><form onSubmit={handleCreate} className="mt-5 space-y-4 text-xs"><input required value={teamName} onChange={e=>setTeamName(e.target.value)} placeholder="Nombre del equipo" className="w-full rounded-xl border p-3"/><input required minLength={2} maxLength={5} value={teamTag} onChange={e=>setTeamTag(e.target.value.toUpperCase())} placeholder="Tag (2-5 letras)" className="w-full rounded-xl border p-3 uppercase"/><label className="block cursor-pointer rounded-xl border border-dashed p-3">{teamLogo?teamLogo.name:'Logo opcional · JPG, PNG o WebP · máximo 2 MB'}<input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={e=>setTeamLogo(e.target.files?.[0]||null)}/></label><p className="rounded-xl bg-gray-100 p-3"><b>Capitán:</b> {currentUser.gamerTag||currentUser.name} (tú)</p><button className="w-full rounded-full bg-black py-3 font-bold text-white">Crear equipo</button></form></div></div>}
+  </div>;
 };
