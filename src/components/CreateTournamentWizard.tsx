@@ -166,7 +166,7 @@ export const CreateTournamentWizard: React.FC<CreateTournamentWizardProps> = ({
     else if (step === 3 && rules.length === 0) error = 'Agrega al menos una regla.';
     else if (step === 4 && entryFeeType !== 'free' && entryFeeAmount <= 0) error = 'La inscripción de pago debe tener un importe mayor a cero.';
     else if (step === 4 && prizeType === 'monetary' && (basePrizePool < 1 || basePrizePool > 10000000)) error = 'El premio monetario debe estar entre $1 y $10,000,000 MXN.';
-    else if (step === 4 && prizeType === 'monetary' && prizePercentageTotal !== 100) error = 'Los porcentajes de los lugares premiados deben sumar exactamente 100%.';
+    else if (step === 4 && (prizeType === 'monetary' || (prizeType === 'other' && entryFeeType !== 'free')) && prizePercentageTotal !== 100) error = 'Los porcentajes de los lugares premiados deben sumar exactamente 100%.';
     else if (step === 4 && prizeType === 'other' && !otherPrizeDesc.trim()) error = 'Describe el premio no monetario.';
     setFormError(error);
     return !error;
@@ -224,7 +224,7 @@ export const CreateTournamentWizard: React.FC<CreateTournamentWizardProps> = ({
       otherPrizeDescription: prizeType === 'other' ? otherPrizeDesc : undefined,
       sponsors: sponsors,
       rules: rules,
-      prizesBreakdown: prizeType === 'monetary' ? prizePercentages.map((percentage, index) => ({
+      prizesBreakdown: (prizeType === 'monetary' || (prizeType === 'other' && entryFeeType !== 'free')) ? prizePercentages.map((percentage, index) => ({
         place: `${index + 1}.${index === 0 ? 'er' : 'º'} Lugar`, percentage,
         estimatedAmount: Math.round(netPrizePool * percentage / 100), description: `${percentage}% de la bolsa neta`
       })) : [],
@@ -756,7 +756,7 @@ export const CreateTournamentWizard: React.FC<CreateTournamentWizardProps> = ({
                   <button key={id} type="button" onClick={() => { setPrizeType(id); if (id === 'no_prize') setOrganizerPercentage(0); }} className={`rounded-xl p-3 text-xs font-bold ${prizeType === id ? 'bg-black text-white' : 'border border-[#E5E7EB] bg-white'}`}>{label}</button>
                 ))}
               </div>
-              {prizeType === 'other' && <div className="space-y-1.5"><input value={otherPrizeDesc} onChange={e => setOtherPrizeDesc(e.target.value)} placeholder="Describe trofeo, productos o reconocimientos" className="w-full rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] p-3 text-xs outline-none" /><p className="text-[11px] text-gray-500">El organizador es responsable de entregar los premios no monetarios descritos.</p></div>}
+              {prizeType === 'other' && <div className="space-y-2"><input value={otherPrizeDesc} onChange={e => setOtherPrizeDesc(e.target.value)} placeholder="Describe trofeo, productos o reconocimientos" className="w-full rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] p-3 text-xs outline-none" /><div className="rounded-2xl border border-amber-300 bg-amber-50 p-4 text-xs text-amber-950"><b>Aviso importante:</b> este premio se entrega directamente por el organizador fuera de Stripe. TournamentX no custodia el objeto, producto o servicio prometido y no se responsabiliza si el organizador no lo entrega.</div></div>}
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
@@ -807,17 +807,18 @@ export const CreateTournamentWizard: React.FC<CreateTournamentWizardProps> = ({
             </div>
 
             {prizeType !== 'no_prize' && <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2"><label className="text-xs font-bold uppercase">Porcentaje del organizador</label><div className="relative"><input type="number" min={0} max={50} value={organizerPercentage} onChange={e => setOrganizerPercentage(Math.min(50, Math.max(0, Number(e.target.value))))} className="w-full rounded-2xl border border-[#E5E7EB] bg-[#F9FAFB] p-3 pr-9 text-xs outline-none" /><span className="absolute right-4 top-3 text-xs font-bold">%</span></div><p className="text-[11px] text-gray-500">Será visible antes de cualquier pago y se bloqueará al recibir el primero.</p></div>
+              <div className="space-y-2"><label className="text-xs font-bold uppercase">Porcentaje del organizador</label><div className="relative"><input type="number" min={0} max={50} value={organizerPercentage} onChange={e => setOrganizerPercentage(Math.min(50, Math.max(0, Number(e.target.value))))} className="w-full rounded-2xl border border-[#E5E7EB] bg-[#F9FAFB] p-3 pr-9 text-xs outline-none" /><span className="absolute right-4 top-3 text-xs font-bold">%</span></div><p className="text-[11px] text-gray-600">De cada bolsa real, el organizador recibe {organizerPercentage}% y el {100 - organizerPercentage}% restante pertenece a los ganadores. Se bloquea al recibir el primer pago.</p></div>
               <div className="space-y-2"><label className="text-xs font-bold uppercase">Agregar patrocinador</label><div className="flex gap-2"><input value={sponsorName} onChange={e => setSponsorName(e.target.value)} placeholder="Nombre" className="min-w-0 flex-1 rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] p-3 text-xs outline-none" /><input type="number" min={0} value={sponsorContribution} onChange={e => setSponsorContribution(Number(e.target.value))} className="w-28 rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] p-3 text-xs outline-none" /><button type="button" onClick={handleAddSponsor} className="rounded-full bg-black px-3 text-white" aria-label="Agregar patrocinador"><Plus className="w-4 h-4" /></button></div><input type="url" value={sponsorLink} onChange={e => setSponsorLink(e.target.value)} placeholder="https://sitio-del-patrocinador.com" className="w-full rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] p-3 text-xs outline-none" /></div>
             </div>}
 
             {prizeType !== 'no_prize' && sponsors.length > 0 && <div className="space-y-2">{sponsors.map(s => <div key={s.id} className="flex items-center justify-between rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] px-4 py-2 text-xs"><span><strong>{s.name}</strong> · ${s.contribution.toLocaleString()} MXN</span><button type="button" onClick={() => handleRemoveSponsor(s.id)} aria-label={`Quitar ${s.name}`}><Trash2 className="w-4 h-4" /></button></div>)}</div>}
 
-            {prizeType === 'monetary' && <div className="space-y-3 rounded-2xl border border-[#E5E7EB] p-4">
-              <div className="flex items-center justify-between"><div><h4 className="text-xs font-bold uppercase">Lugares premiados</h4><p className="text-[11px] text-gray-500">Puedes dejar solo el primer lugar o agregar más. El total debe ser 100%.</p></div><button type="button" disabled={prizePercentages.length >= 10} onClick={() => setPrizePercentages(values => [...values, 0])} className="rounded-full border px-3 py-2 text-xs font-bold disabled:opacity-40"><Plus className="inline h-3.5 w-3.5" /> Lugar</button></div>
+            {(prizeType === 'monetary' || (prizeType === 'other' && entryFeeType !== 'free')) && <div className="space-y-3 rounded-2xl border border-[#E5E7EB] p-4">
+              <div className="flex items-center justify-between"><div><h4 className="text-xs font-bold uppercase">Distribución monetaria para ganadores</h4><p className="text-[11px] text-gray-500">{prizeType === 'other' ? 'Si cobras inscripción, el dinero restante queda en la bolsa monetaria de los ganadores; el otro premio se entrega por separado.' : 'Puedes dejar solo el primer lugar o agregar más.'} El total debe ser 100%.</p></div><button type="button" disabled={prizePercentages.length >= 10} onClick={() => setPrizePercentages(values => [...values, 0])} className="rounded-full border px-3 py-2 text-xs font-bold disabled:opacity-40"><Plus className="inline h-3.5 w-3.5" /> Lugar</button></div>
               <div className="grid gap-2 sm:grid-cols-2">{prizePercentages.map((percentage, index) => <div key={index} className="flex items-center gap-2 rounded-xl bg-[#F9FAFB] p-2"><span className="min-w-20 text-xs font-bold">{index + 1}.{index === 0 ? 'er' : 'º'} lugar</span><input aria-label={`Porcentaje del lugar ${index + 1}`} type="number" min={0} max={100} step={0.01} value={percentage} onChange={event => setPrizePercentages(values => values.map((value, itemIndex) => itemIndex === index ? Math.min(100, Math.max(0, Number(event.target.value))) : value))} className="min-w-0 flex-1 rounded-lg border bg-white p-2 text-xs" /><span className="text-xs font-bold">%</span>{prizePercentages.length > 1 && <button type="button" aria-label={`Quitar lugar ${index + 1}`} onClick={() => setPrizePercentages(values => values.filter((_, itemIndex) => itemIndex !== index))}><Trash2 className="h-4 w-4" /></button>}</div>)}</div>
               <p className={`text-xs font-bold ${prizePercentageTotal === 100 ? 'text-green-700' : 'text-red-600'}`}>Total: {prizePercentageTotal}% {prizePercentageTotal === 100 ? '✓' : '— debe sumar 100%'}</p>
             </div>}
+            {prizeType === 'other' && entryFeeType !== 'free' && <div className="rounded-3xl bg-black p-5 text-white"><p className="text-xs font-black">¿Quién recibe el dinero?</p><p className="mt-2 text-xs text-gray-300">Con una bolsa proyectada de ${grossPrizePool.toLocaleString()} MXN: ${organizerCut.toLocaleString()} MXN ({organizerPercentage}%) corresponden al organizador y ${netPrizePool.toLocaleString()} MXN ({100 - organizerPercentage}%) quedan destinados a los ganadores, además del premio externo prometido.</p></div>}
 
             {/* Cálculo de la Bolsa de Premios */}
             {prizeType === 'monetary' && <div className="bg-black text-white p-6 rounded-3xl border border-gray-800 space-y-4 shadow-xs">

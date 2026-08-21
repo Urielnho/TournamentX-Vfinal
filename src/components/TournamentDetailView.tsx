@@ -354,16 +354,13 @@ export const TournamentDetailView: React.FC<TournamentDetailViewProps> = ({
         )}
 
         {/* Tab 6: PREMIOS */}
-        {activeTab === 'premios' && (tournament.prizesBreakdown.length > 0 ? (
-          <div className={`grid grid-cols-1 gap-4 ${tournament.prizesBreakdown.length > 1 ? 'sm:grid-cols-2' : ''} ${tournament.prizesBreakdown.length > 2 ? 'lg:grid-cols-3' : ''}`}>
-            {tournament.prizesBreakdown.map((prize, index) => <div key={`${prize.place}-${index}`} className={`bg-white p-6 rounded-3xl text-center ${index === 0 ? 'border-2 border-black' : 'border border-[#E5E7EB]'}`}>
-              <span className="text-2xl">{['🏆', '🥈', '🥉'][index] || '🏅'}</span>
-              <h4 className="text-sm font-bold text-black mt-2">{prize.place}</h4>
-              <p className="text-xl font-black text-black mt-1">${prize.estimatedAmount.toLocaleString('es-MX')} MXN</p>
-              <p className="text-[11px] text-gray-500 mt-1">{prize.percentage}% de la bolsa neta de premios</p>
-            </div>)}
-          </div>
-        ) : <div className="rounded-3xl border border-[#E5E7EB] bg-[#F9FAFB] p-10 text-center"><h3 className="font-black">Este torneo no tiene premios monetarios</h3></div>)}
+        {activeTab === 'premios' && <div className="space-y-4">
+          {tournament.prizeType === 'other' && <div className="rounded-3xl border border-amber-300 bg-amber-50 p-5 text-amber-950"><h3 className="font-black">Premio entregado por el organizador</h3><p className="mt-2 text-sm">{tournament.otherPrizeDescription || 'Premio externo pendiente de descripción.'}</p><p className="mt-3 text-xs"><b>Aviso:</b> este premio no monetario se entrega fuera de Stripe. TournamentX no lo custodia y no se responsabiliza si el organizador incumple su entrega.</p></div>}
+          {tournament.entryFeeAmount > 0 && tournament.prizeType !== 'no_prize' && <div className="rounded-3xl border border-[#E5E7EB] bg-white p-5 text-xs text-gray-700"><p><b>Distribución del dinero:</b> el {tournament.organizerPercentage}% corresponde al organizador y el {100 - tournament.organizerPercentage}% restante queda destinado a los ganadores; no se entrega al organizador.</p>{tournament.financials && <p className="mt-2">Actualmente: organizador ${tournament.financials.organizerAmount.toLocaleString('es-MX')} MXN · ganadores ${tournament.financials.prizeAmount.toLocaleString('es-MX')} MXN.</p>}</div>}
+          {tournament.prizesBreakdown.length > 0 ? <div className={`grid grid-cols-1 gap-4 ${tournament.prizesBreakdown.length > 1 ? 'sm:grid-cols-2' : ''} ${tournament.prizesBreakdown.length > 2 ? 'lg:grid-cols-3' : ''}`}>
+            {tournament.prizesBreakdown.map((prize, index) => <div key={`${prize.place}-${index}`} className={`bg-white p-6 rounded-3xl text-center ${index === 0 ? 'border-2 border-black' : 'border border-[#E5E7EB]'}`}><span className="text-2xl">{['🏆', '🥈', '🥉'][index] || '🏅'}</span><h4 className="text-sm font-bold text-black mt-2">{prize.place}</h4><p className="text-xl font-black text-black mt-1">${prize.estimatedAmount.toLocaleString('es-MX')} MXN</p><p className="text-[11px] text-gray-500 mt-1">{prize.percentage}% de la bolsa neta de premios</p></div>)}
+          </div> : tournament.prizeType === 'no_prize' ? <div className="rounded-3xl border border-[#E5E7EB] bg-[#F9FAFB] p-10 text-center"><h3 className="font-black">Este torneo no tiene premios</h3></div> : tournament.prizeType !== 'other' && <div className="rounded-3xl border border-[#E5E7EB] bg-[#F9FAFB] p-10 text-center"><h3 className="font-black">La bolsa todavía no tiene fondos confirmados</h3></div>}
+        </div>}
       </div>
 
       {/* Registration Modal */}
