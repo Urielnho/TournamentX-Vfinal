@@ -261,7 +261,7 @@ export const TournamentDetailView: React.FC<TournamentDetailViewProps> = ({
             <div className="flex flex-col gap-6">
               <div className="bg-white p-6 rounded-3xl border border-[#E5E7EB] space-y-4 shadow-xs">
                 <h3 className="text-base font-extrabold text-black">{tournament.isUserOrganizing ? 'Gestión del torneo' : 'Registro Inmediato'}</h3>
-                {tournament.isUserOrganizing ? <><p className="text-xs text-gray-600">Como organizador administras esta competencia y no puedes inscribirte como participante.</p><button onClick={() => onNavigate('organizer-dashboard', tournament.id)} className="w-full rounded-full bg-black py-3 text-xs font-bold text-white">Administrar torneo</button></> : registrationOpen ? <>
+                {tournament.isUserOrganizing ? <p className="text-xs text-gray-600">Como organizador administras esta competencia y no puedes inscribirte como participante. Usa el botón “Administrar torneo” de la parte superior para gestionar la competencia.</p> : registrationOpen ? <>
                 <p className="text-xs text-gray-600">{tournament.participantType === 'individual' ? 'Regístrate como jugador individual.' : 'Inscribe al equipo del que eres capitán.'}</p>
                 {tournament.participantType === 'team' && <button
                   onClick={() => {
