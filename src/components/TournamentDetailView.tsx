@@ -56,7 +56,7 @@ export const TournamentDetailView: React.FC<TournamentDetailViewProps> = ({
   };
 
   const tournamentMatches = matches.filter(m => m.tournamentId === tournament.id);
-  const totalPrizePool = tournament.basePrizePool + tournament.sponsors.reduce((total, sponsor) => total + sponsor.contribution, 0);
+  const totalPrizePool = tournament.financials?.prizeAmount ?? tournament.basePrizePool;
   const registrationOpen = isRegistrationOpen(tournament);
 
   const detailTabs = [
@@ -104,7 +104,7 @@ export const TournamentDetailView: React.FC<TournamentDetailViewProps> = ({
               </h1>
 
               <p className="text-xs sm:text-sm text-gray-400">
-                Organizado por <span className="text-white font-bold">{tournament.organizer.name}</span> • {tournament.startDate}
+                Organizado por <span className="text-white font-bold">{tournament.organizer.name}</span> • {new Date(tournament.startDate).toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short' })}
               </p>
             </div>
 
@@ -158,7 +158,7 @@ export const TournamentDetailView: React.FC<TournamentDetailViewProps> = ({
 
           <div className="bg-[#F9FAFB] border border-[#E5E7EB] p-3.5 rounded-2xl">
             <span className="text-[10px] uppercase font-bold text-gray-500 block">Fechas</span>
-            <span className="text-xs font-bold text-black truncate block mt-0.5">{tournament.startDate} - {tournament.endDate}</span>
+            <span className="text-xs font-bold text-black truncate block mt-0.5">{new Date(tournament.startDate).toLocaleDateString('es-MX')} - {new Date(tournament.endDate).toLocaleDateString('es-MX')}</span>
           </div>
         </div>
       </div>
@@ -311,30 +311,16 @@ export const TournamentDetailView: React.FC<TournamentDetailViewProps> = ({
         )}
 
         {/* Tab 6: PREMIOS */}
-        {activeTab === 'premios' && (
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="bg-white p-6 rounded-3xl border-2 border-black text-center">
-              <span className="text-2xl">🏆</span>
-              <h4 className="text-sm font-bold text-black mt-2">1er Lugar</h4>
-              <p className="text-xl font-black text-black mt-1">${tournament.prizesBreakdown[0]?.estimatedAmount.toLocaleString() || '0'} MXN</p>
-              <p className="text-[11px] text-gray-500 mt-1">60% de la bolsa total</p>
-            </div>
-
-            <div className="bg-white p-6 rounded-3xl border border-[#E5E7EB] text-center">
-              <span className="text-2xl">🥈</span>
-              <h4 className="text-sm font-bold text-black mt-2">2do Lugar</h4>
-              <p className="text-xl font-black text-black mt-1">${tournament.prizesBreakdown[1]?.estimatedAmount.toLocaleString() || '0'} MXN</p>
-              <p className="text-[11px] text-gray-500 mt-1">30% de la bolsa total</p>
-            </div>
-
-            <div className="bg-white p-6 rounded-3xl border border-[#E5E7EB] text-center">
-              <span className="text-2xl">🥉</span>
-              <h4 className="text-sm font-bold text-black mt-2">3er Lugar</h4>
-              <p className="text-xl font-black text-black mt-1">${tournament.prizesBreakdown[2]?.estimatedAmount.toLocaleString() || '0'} MXN</p>
-              <p className="text-[11px] text-gray-500 mt-1">10% de la bolsa total</p>
-            </div>
+        {activeTab === 'premios' && (tournament.prizesBreakdown.length > 0 ? (
+          <div className={`grid grid-cols-1 gap-4 ${tournament.prizesBreakdown.length > 1 ? 'sm:grid-cols-2' : ''} ${tournament.prizesBreakdown.length > 2 ? 'lg:grid-cols-3' : ''}`}>
+            {tournament.prizesBreakdown.map((prize, index) => <div key={`${prize.place}-${index}`} className={`bg-white p-6 rounded-3xl text-center ${index === 0 ? 'border-2 border-black' : 'border border-[#E5E7EB]'}`}>
+              <span className="text-2xl">{['🏆', '🥈', '🥉'][index] || '🏅'}</span>
+              <h4 className="text-sm font-bold text-black mt-2">{prize.place}</h4>
+              <p className="text-xl font-black text-black mt-1">${prize.estimatedAmount.toLocaleString('es-MX')} MXN</p>
+              <p className="text-[11px] text-gray-500 mt-1">{prize.percentage}% de la bolsa neta de premios</p>
+            </div>)}
           </div>
-        )}
+        ) : <div className="rounded-3xl border border-[#E5E7EB] bg-[#F9FAFB] p-10 text-center"><h3 className="font-black">Este torneo no tiene premios monetarios</h3></div>)}
       </div>
 
       {/* Registration Modal */}

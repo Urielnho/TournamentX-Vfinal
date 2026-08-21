@@ -124,7 +124,7 @@ export const ProfileAthleteView: React.FC<ProfileAthleteViewProps> = ({
             <span className="text-[10px] uppercase font-bold">Total Ganado</span>
             <DollarSign className="w-4 h-4 text-black" />
           </div>
-          <p className="text-xl sm:text-2xl font-black text-black">${user.totalWon.toLocaleString()} USD</p>
+          <p className="text-xl sm:text-2xl font-black text-black">${user.totalWon.toLocaleString('es-MX')} MXN</p>
         </div>
 
         <div className="bg-white p-5 rounded-3xl border border-[#E5E7EB] shadow-xs">
@@ -132,7 +132,7 @@ export const ProfileAthleteView: React.FC<ProfileAthleteViewProps> = ({
             <span className="text-[10px] uppercase font-bold">Por Reclamar</span>
             <Trophy className="w-4 h-4 text-black" />
           </div>
-          <p className="text-xl sm:text-2xl font-black text-black">${user.pendingAmount.toLocaleString()} USD</p>
+          <p className="text-xl sm:text-2xl font-black text-black">${user.pendingAmount.toLocaleString('es-MX')} MXN</p>
         </div>
 
         <div className="bg-white p-5 rounded-3xl border border-[#E5E7EB] shadow-xs">

@@ -8,11 +8,13 @@ import { createOrganizerPaymentIntent, uploadTournamentBanner, waitForOrganizerF
 
 interface CreateTournamentWizardProps {
   onTournamentCreated: (newTournament: Tournament) => Promise<Tournament>;
+  onTournamentPublished: (tournamentId: string) => Promise<void>;
   onNavigate: (view: ViewMode, tournamentId?: string) => void;
 }
 
 export const CreateTournamentWizard: React.FC<CreateTournamentWizardProps> = ({
   onTournamentCreated,
+  onTournamentPublished,
   onNavigate
 }) => {
   const [currentStep, setCurrentStep] = useState(1);
@@ -246,6 +248,7 @@ export const CreateTournamentWizard: React.FC<CreateTournamentWizardProps> = ({
 
   const handleFundingPaid = async () => {
     await waitForOrganizerFunding(draftTournamentId);
+    await onTournamentPublished(draftTournamentId);
     confetti({ particleCount: 80, spread: 70, origin: { y: 0.5 } });
     onNavigate('tournament-detail', draftTournamentId);
   };

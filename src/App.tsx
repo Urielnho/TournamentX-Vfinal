@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import type { User as SupabaseUser } from '@supabase/supabase-js';
 import { AdminUserSummary, Match, Participant, PendingApproval, Team, Tournament, Transaction, UserProfile, ViewMode } from './types';
 import { Navbar } from './components/Navbar';
@@ -34,17 +34,21 @@ export default function App() {
   const [teams, setTeams] = useState<Team[]>([]);
   const [users, setUsers] = useState<AdminUserSummary[]>([]);
   const [authUser, setAuthUser] = useState<SupabaseUser | null>(null);
+  const [authInitialized, setAuthInitialized] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [loadingData, setLoadingData] = useState(true);
   const [dataError, setDataError] = useState('');
   const [paymentNotice, setPaymentNotice] = useState('');
   const [registrationPayment, setRegistrationPayment] = useState<{ clientSecret: string; paymentIntentId: string; amount: number; tournamentTitle: string } | null>(null);
+  const dataRequestId = useRef(0);
 
   const refreshData = useCallback(async (userId?: string) => {
+    const requestId = ++dataRequestId.current;
     setLoadingData(true);
     setDataError('');
     try {
       const data = await loadAppData(userId);
+      if (requestId !== dataRequestId.current) return;
       setTournaments(data.tournaments);
       setTeams(data.teams);
       setParticipants(data.participants);
@@ -54,9 +58,10 @@ export default function App() {
       setUsers(data.users);
       setSelectedTournamentId(previous => previous || data.tournaments[0]?.id || '');
     } catch (error) {
+      if (requestId !== dataRequestId.current) return;
       setDataError(error instanceof Error ? error.message : 'No se pudieron cargar los datos de Supabase.');
     } finally {
-      setLoadingData(false);
+      if (requestId === dataRequestId.current) setLoadingData(false);
     }
   }, []);
 
@@ -66,15 +71,17 @@ export default function App() {
       setDataError('Supabase no está configurado.');
       return;
     }
-    supabase.auth.getSession().then(({ data }) => setAuthUser(data.session?.user ?? null));
+    supabase.auth.getSession().then(({ data }) => { setAuthUser(data.session?.user ?? null); setAuthInitialized(true); });
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       setAuthUser(session?.user ?? null);
+      setAuthInitialized(true);
       if (session?.user) setShowAuthModal(false);
     });
     return () => listener.subscription.unsubscribe();
   }, []);
 
   useEffect(() => {
+    if (!authInitialized) return;
     void refreshData(authUser?.id);
     if (!authUser) {
       setUserProfile(EMPTY_PROFILE);
@@ -86,7 +93,7 @@ export default function App() {
       if (!data) return;
       setUserProfile(previous => ({ ...previous, name: data.full_name || previous.name, gamerTag: data.gamer_tag || previous.gamerTag, avatarUrl: data.avatar_url || previous.avatarUrl, globalRole: data.global_role === 'admin' ? 'admin' : 'user' }));
     });
-  }, [authUser, refreshData]);
+  }, [authInitialized, authUser, refreshData]);
 
   useEffect(() => {
     if (!authUser || !supabase) return;
@@ -209,7 +216,7 @@ export default function App() {
       {currentView === 'home' && <HomeView tournaments={tournaments} onNavigate={handleNavigate} />}
       {currentView === 'tournaments' && <ExploreTournamentsView tournaments={tournaments} onNavigate={handleNavigate} />}
       {currentView === 'tournament-detail' && (currentTournament ? <TournamentDetailView tournament={currentTournament} matches={matches} participants={currentParticipants} onNavigate={handleNavigate} onRegister={handleRegister} /> : <EmptyState message="Este torneo no existe o ya no está disponible." onBack={() => handleNavigate('tournaments')} />)}
-      {currentView === 'create-tournament' && authUser && <CreateTournamentWizard onTournamentCreated={handleTournamentCreated} onNavigate={handleNavigate} />}
+      {currentView === 'create-tournament' && authUser && <CreateTournamentWizard onTournamentCreated={handleTournamentCreated} onTournamentPublished={async tournamentId => { await refreshData(authUser.id); setSelectedTournamentId(tournamentId); }} onNavigate={handleNavigate} />}
       {currentView === 'organizer-dashboard' && currentTournament?.isUserOrganizing && <OrganizerDashboardView transactions={transactions.filter(transaction => transaction.tournamentId === currentTournament.id)} pendingApprovals={pendingApprovals.filter(item => item.tournamentId === currentTournament.id)} tournaments={tournaments.filter(t => t.isUserOrganizing)} matches={matches.filter(match => match.tournamentId === currentTournament.id)} participants={currentParticipants} onNavigate={handleNavigate} onApproveTeam={id => void approveTeam(id)} onRejectTeam={id => void rejectTeam(id)} onUpdateMatchScore={(id, a, b) => void updateScore(id, a, b)} />}
       {currentView === 'profile' && authUser && <ProfileAthleteView user={userProfile} onUpdateUser={profile => void updateProfile(profile)} onNavigate={handleNavigate} />}
       {currentView === 'teams' && <TeamsView participants={teamCards} tournaments={tournaments} onNavigate={handleNavigate} onCreateTeam={handleCreateTeam} />}

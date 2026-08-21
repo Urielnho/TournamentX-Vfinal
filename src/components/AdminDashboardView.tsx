@@ -168,7 +168,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
 
         <div className="bg-white p-5 rounded-3xl border border-[#E5E7EB] shadow-xs">
           <span className="text-[10px] text-gray-500 font-bold uppercase">Volumen Procesado</span>
-          <p className="text-2xl font-black text-black mt-1">${totalVolume.toLocaleString()} USD</p>
+          <p className="text-2xl font-black text-black mt-1">${totalVolume.toLocaleString('es-MX')} MXN</p>
           <span className="text-[11px] text-gray-500 mt-0.5 block">{transactions.length} transacciones</span>
         </div>
 

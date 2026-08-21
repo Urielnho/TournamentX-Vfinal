@@ -141,10 +141,11 @@ export async function loadAppData(userId?: string): Promise<AppDatabaseData> {
     } : {
       id: registration.id,
       tournamentId: registration.tournament_id,
-      name: profile?.full_name || 'Participante',
+      name: profile?.gamer_tag || profile?.full_name || 'Participante',
       tag: (profile?.gamer_tag || profile?.full_name || 'USR').slice(0, 5).toUpperCase(),
       logo: profile?.avatar_url || '',
       membersCount: 1,
+      captain: profile?.full_name || profile?.gamer_tag || 'Jugador',
       captainId: registration.user_id,
       status: 'confirmed' as const,
     };
