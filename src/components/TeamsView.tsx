@@ -8,7 +8,7 @@ interface TeamsViewProps {
   tournaments: Tournament[];
   currentUser: UserProfile;
   onNavigate: (view: ViewMode, tournamentId?: string) => void;
-  onCreateTeam: (tournamentId: string, name: string, tag: string) => Promise<void>;
+  onCreateTeam: (tournamentId: string, name: string, tag: string, logoFile?: File) => Promise<void>;
 }
 
 export const TeamsView: React.FC<TeamsViewProps> = ({
@@ -23,6 +23,7 @@ export const TeamsView: React.FC<TeamsViewProps> = ({
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [teamName, setTeamName] = useState('');
   const [teamTag, setTeamTag] = useState('');
+  const [teamLogo, setTeamLogo] = useState<File | null>(null);
   const [selectedTournamentId, setSelectedTournamentId] = useState('');
   const [createError, setCreateError] = useState('');
 
@@ -36,10 +37,11 @@ export const TeamsView: React.FC<TeamsViewProps> = ({
     if (!selectedTournamentId || !teamName.trim() || !teamTag.trim()) return;
     setCreateError('');
     try {
-      await onCreateTeam(selectedTournamentId, teamName.trim(), teamTag.toUpperCase());
+      await onCreateTeam(selectedTournamentId, teamName.trim(), teamTag.toUpperCase(), teamLogo || undefined);
       setShowCreateModal(false);
       setTeamName('');
       setTeamTag('');
+      setTeamLogo(null);
       confetti({ particleCount: 50, spread: 50 });
     } catch (error) {
       setCreateError(error instanceof Error ? error.message : 'No se pudo crear el equipo.');
@@ -102,8 +104,8 @@ export const TeamsView: React.FC<TeamsViewProps> = ({
             className="bg-white rounded-3xl border border-[#E5E7EB] p-5 flex flex-col justify-between gap-4 hover:border-black hover:shadow-md transition-all"
           >
             <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-2xl bg-[#F9FAFB] text-black font-black text-sm flex items-center justify-center border border-[#E5E7EB] shrink-0">
-                {team.tag}
+              <div className="w-12 h-12 overflow-hidden rounded-2xl bg-[#F9FAFB] text-black font-black text-sm flex items-center justify-center border border-[#E5E7EB] shrink-0">
+                {team.logo ? <img src={team.logo} alt={`Logo de ${team.name}`} className="h-full w-full object-cover" /> : team.tag}
               </div>
 
               <div className="overflow-hidden flex-1 text-xs">
@@ -172,6 +174,15 @@ export const TeamsView: React.FC<TeamsViewProps> = ({
                 <label className="font-bold text-gray-600 uppercase block mb-1">Capitán / Líder</label>
                 <div className="w-full rounded-xl border border-[#E5E7EB] bg-gray-100 px-3.5 py-2.5 font-bold text-black">{currentUser.gamerTag || currentUser.name} <span className="font-normal text-gray-500">({currentUser.name} · tú)</span></div>
                 <p className="mt-1.5 text-[11px] text-gray-500">Tu cuenta quedará registrada automáticamente como capitán y responsable del premio.</p>
+              </div>
+
+              <div>
+                <label className="font-bold text-gray-600 uppercase block mb-1">Logo del equipo (opcional)</label>
+                <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-dashed border-gray-300 bg-[#F9FAFB] p-3 hover:border-black">
+                  {teamLogo ? <img src={URL.createObjectURL(teamLogo)} alt="Vista previa del logo" className="h-12 w-12 rounded-xl object-cover" /> : <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-black font-black text-white">{teamTag || 'LOGO'}</div>}
+                  <span className="text-[11px] text-gray-600">{teamLogo ? teamLogo.name : 'Seleccionar JPG, PNG o WebP · máximo 2 MB'}</span>
+                  <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={event => setTeamLogo(event.target.files?.[0] || null)} />
+                </label>
               </div>
 
               <div className="flex gap-3 pt-2">

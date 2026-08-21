@@ -41,7 +41,7 @@ interface TournamentDetailViewProps {
   teams: Team[];
   currentUser: UserProfile;
   onNavigate: (view: ViewMode, tournamentId?: string) => void;
-  onRegister: (tournamentId: string, teamName: string, ign: string, type: 'team' | 'individual', teamId?: string) => Promise<'payment_pending' | 'confirmed'>;
+  onRegister: (tournamentId: string, teamName: string, ign: string, type: 'team' | 'individual', teamId?: string, logoFile?: File) => Promise<'payment_pending' | 'confirmed'>;
 }
 
 export const TournamentDetailView: React.FC<TournamentDetailViewProps> = ({
@@ -61,6 +61,7 @@ export const TournamentDetailView: React.FC<TournamentDetailViewProps> = ({
   const [regType, setRegType] = useState<'team' | 'individual'>('team');
   const [regTeamName, setRegTeamName] = useState('');
   const [selectedTeamId, setSelectedTeamId] = useState('new');
+  const [regTeamLogo, setRegTeamLogo] = useState<File | null>(null);
   const [registrationSuccess, setRegistrationSuccess] = useState(false);
   const [registrationError, setRegistrationError] = useState('');
 
@@ -71,7 +72,7 @@ export const TournamentDetailView: React.FC<TournamentDetailViewProps> = ({
     setRegistrationError('');
     try {
       const selectedTeam = teams.find(team => team.id === selectedTeamId);
-      const result = await onRegister(tournament.id, selectedTeam?.name || regTeamName, currentUser.gamerTag, regType, selectedTeam?.id);
+      const result = await onRegister(tournament.id, selectedTeam?.name || regTeamName, currentUser.gamerTag, regType, selectedTeam?.id, regTeamLogo || undefined);
       if (result === 'payment_pending') { setShowRegisterModal(false); return; }
       setRegistrationSuccess(true);
       confetti({ particleCount: 50, spread: 50, origin: { y: 0.6 } });
@@ -326,8 +327,8 @@ export const TournamentDetailView: React.FC<TournamentDetailViewProps> = ({
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
             {participants.map(p => (
               <div key={p.id} className="bg-white p-4 rounded-2xl border border-[#E5E7EB] flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-black text-white font-bold text-xs flex items-center justify-center shrink-0">
-                  {p.tag || p.name.slice(0, 2).toUpperCase()}
+                <div className="w-10 h-10 overflow-hidden rounded-xl bg-black text-white font-bold text-xs flex items-center justify-center shrink-0">
+                  {p.logo ? <img src={p.logo} alt={`Logo de ${p.name}`} className="h-full w-full object-cover" /> : p.tag || p.name.slice(0, 2).toUpperCase()}
                 </div>
                 <div className="overflow-hidden">
                   <h4 className="text-xs font-bold text-black truncate">{p.name}</h4>
@@ -413,6 +414,7 @@ export const TournamentDetailView: React.FC<TournamentDetailViewProps> = ({
                       <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Nombre del Equipo</label>
                       <input type="text" required placeholder="Ej: Sentinels Latam" value={regTeamName} onChange={(e) => setRegTeamName(e.target.value)} className="w-full bg-[#F9FAFB] border border-[#E5E7EB] focus:border-black rounded-xl px-3.5 py-2.5 text-xs text-black outline-none" />
                     </div>}
+                    {(captainTeams.length === 0 || selectedTeamId === 'new') && <label className="block cursor-pointer rounded-xl border border-dashed border-gray-300 bg-[#F9FAFB] p-3 text-xs text-gray-600 hover:border-black">{regTeamLogo ? `Logo seleccionado: ${regTeamLogo.name}` : 'Agregar logo del equipo (opcional) · JPG, PNG o WebP · máximo 2 MB'}<input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={event => setRegTeamLogo(event.target.files?.[0] || null)} /></label>}
                     <p className="rounded-xl border border-blue-200 bg-blue-50 p-3 text-xs text-blue-950">Solo puedes inscribir equipos donde eres capitán. Si el equipo gana, tú serás la persona responsable de recibir el premio.</p>
                   </div>
                 )}

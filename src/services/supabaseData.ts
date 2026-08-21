@@ -19,6 +19,20 @@ export async function uploadTournamentBanner(file: File): Promise<string> {
   return supabase.storage.from('tournament-media').getPublicUrl(path).data.publicUrl;
 }
 
+export async function uploadTeamLogo(file: File): Promise<string> {
+  if (!supabase) throw new Error('Supabase no está configurado.');
+  const allowedTypes = new Set(['image/jpeg', 'image/png', 'image/webp']);
+  if (!allowedTypes.has(file.type)) throw new Error('El logo debe ser JPG, PNG o WebP.');
+  if (file.size > 2 * 1024 * 1024) throw new Error('El logo no puede superar 2 MB.');
+  const { data: authData } = await supabase.auth.getUser();
+  if (!authData.user) throw new Error('Inicia sesión para subir un logo.');
+  const extension = file.type === 'image/png' ? 'png' : file.type === 'image/webp' ? 'webp' : 'jpg';
+  const path = `${authData.user.id}/teams/${crypto.randomUUID()}.${extension}`;
+  const { error } = await supabase.storage.from('tournament-media').upload(path, file, { cacheControl: '3600', contentType: file.type, upsert: false });
+  if (error) throw error;
+  return supabase.storage.from('tournament-media').getPublicUrl(path).data.publicUrl;
+}
+
 export interface AppDatabaseData {
   tournaments: Tournament[];
   teams: Team[];
@@ -299,9 +313,9 @@ export async function insertRegistration(tournamentId: string, userId: string, t
   if (error) throw error;
 }
 
-export async function insertTeam(tournamentId: string, captainId: string, name: string, tag: string) {
+export async function insertTeam(tournamentId: string, captainId: string, name: string, tag: string, logoUrl?: string) {
   if (!supabase) throw new Error('Supabase no está configurado.');
-  const { data, error } = await supabase.from('teams').insert({ tournament_id: tournamentId, captain_id: captainId, name, tag, status: 'confirmed', payment_status: 'unpaid' }).select('id').single();
+  const { data, error } = await supabase.from('teams').insert({ tournament_id: tournamentId, captain_id: captainId, name, tag, logo_url: logoUrl || null, status: 'confirmed', payment_status: 'unpaid' }).select('id').single();
   if (error) throw error;
   await supabase.from('team_members').insert({ team_id: data.id, user_id: captainId, member_role: 'captain' });
   return data.id;

@@ -14,7 +14,7 @@ import { AdminDashboardView } from './components/AdminDashboardView';
 import { AuthModal } from './components/AuthModal';
 import { OrganizerFundingPayment } from './components/OrganizerFundingPayment';
 import { supabase } from './lib/supabase';
-import { createRegistrationPaymentIntent, insertRegistration, insertTeam, insertTournament, loadAppData, updateTournamentSettings, waitForRegistrationPayment } from './services/supabaseData';
+import { createRegistrationPaymentIntent, insertRegistration, insertTeam, insertTournament, loadAppData, updateTournamentSettings, uploadTeamLogo, waitForRegistrationPayment } from './services/supabaseData';
 
 const EMPTY_PROFILE: UserProfile = {
   id: '', name: 'Visitante', gamerTag: 'Visitante', globalRole: 'user', rank: 'Sin clasificación', level: 0,
@@ -183,7 +183,7 @@ export default function App() {
     return { ...tournament, id, organizerId: authUser.id, organizer: { name: userProfile.name, avatar: userProfile.avatarUrl }, isUserOrganizing: true };
   };
 
-  const handleRegister = async (tournamentId: string, teamName: string, _ign: string, type: 'team' | 'individual', selectedTeamId?: string) => {
+  const handleRegister = async (tournamentId: string, teamName: string, _ign: string, type: 'team' | 'individual', selectedTeamId?: string, logoFile?: File) => {
     if (!authUser) { setShowAuthModal(true); throw new Error('Inicia sesión para inscribirte.'); }
     const tournament = tournaments.find(item => item.id === tournamentId);
     if (!tournament) throw new Error('El torneo ya no está disponible.');
@@ -191,7 +191,8 @@ export default function App() {
     if (type !== tournament.participantType) throw new Error(tournament.participantType === 'individual' ? 'Este torneo solo acepta inscripciones individuales.' : 'Este torneo solo acepta inscripciones por equipo.');
     const existingTeam = type === 'team' && selectedTeamId ? teams.find(team => team.id === selectedTeamId && team.tournamentId === tournamentId && team.captainId === authUser.id) : undefined;
     if (type === 'team' && selectedTeamId && !existingTeam) throw new Error('Solo el capitán puede inscribir este equipo.');
-    const teamId = type === 'team' ? existingTeam?.id || await insertTeam(tournamentId, authUser.id, teamName, teamName.slice(0, 5).toUpperCase()) : undefined;
+    const logoUrl = type === 'team' && !existingTeam && logoFile ? await uploadTeamLogo(logoFile) : undefined;
+    const teamId = type === 'team' ? existingTeam?.id || await insertTeam(tournamentId, authUser.id, teamName, teamName.slice(0, 5).toUpperCase(), logoUrl) : undefined;
     if (tournament.entryFeeType !== 'free' && tournament.entryFeeAmount > 0) {
       const payment = await createRegistrationPaymentIntent(tournamentId, teamId);
       setRegistrationPayment({ ...payment, amount: tournament.entryFeeAmount, tournamentTitle: tournament.title });
@@ -210,9 +211,10 @@ export default function App() {
     await refreshData(authUser?.id);
   };
 
-  const handleCreateTeam = async (tournamentId: string, name: string, tag: string) => {
+  const handleCreateTeam = async (tournamentId: string, name: string, tag: string, logoFile?: File) => {
     if (!authUser) { setShowAuthModal(true); throw new Error('Inicia sesión para crear un equipo.'); }
-    await insertTeam(tournamentId, authUser.id, name, tag);
+    const logoUrl = logoFile ? await uploadTeamLogo(logoFile) : undefined;
+    await insertTeam(tournamentId, authUser.id, name, tag, logoUrl);
     await refreshData(authUser.id);
   };
 
