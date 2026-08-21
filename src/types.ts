@@ -120,6 +120,7 @@ export interface Participant {
   membersCount?: number;
   captain?: string;
   captainId?: string;
+  memberIds?: string[];
   status: 'confirmed' | 'pending' | 'eliminated';
   score?: number;
 }

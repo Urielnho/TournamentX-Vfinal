@@ -247,7 +247,7 @@ export default function App() {
 
   const currentTournament = tournaments.find(tournament => tournament.id === selectedTournamentId);
   const currentParticipants = participants.filter(participant => !participant.tournamentId || participant.tournamentId === selectedTournamentId);
-  const teamCards: Participant[] = teams.map(team => ({ id: team.id, tournamentId: team.tournamentId, name: team.name, tag: team.tag, logo: team.logo, captain: team.captainName, captainId: team.captainId, membersCount: team.members.length, status: team.status === 'confirmed' ? 'confirmed' : 'pending' }));
+  const teamCards: Participant[] = teams.map(team => ({ id: team.id, tournamentId: team.tournamentId, name: team.name, tag: team.tag, logo: team.logo, captain: team.captainName, captainId: team.captainId, memberIds: team.members.map(member => member.id), membersCount: team.members.length, status: team.status === 'confirmed' ? 'confirmed' : 'pending' }));
 
   return <div className="flex min-h-screen flex-col bg-white text-black selection:bg-black selection:text-white">
     <Navbar currentView={currentView} onNavigate={handleNavigate} user={userProfile} authUser={authUser} onSignIn={() => setShowAuthModal(true)} onSignOut={handleSignOut} searchQuery={globalSearchQuery} onSearchQueryChange={setGlobalSearchQuery} onSearchSubmit={() => handleNavigate('tournaments')} />

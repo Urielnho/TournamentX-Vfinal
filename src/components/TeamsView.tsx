@@ -27,9 +27,13 @@ export const TeamsView: React.FC<TeamsViewProps> = ({
   const [selectedTournamentId, setSelectedTournamentId] = useState('');
   const [createError, setCreateError] = useState('');
 
-  const filteredTeams = participants.filter(t => 
-    t.name.toLowerCase().includes(search.toLowerCase()) ||
-    t.tag.toLowerCase().includes(search.toLowerCase())
+  const userTeams = participants.filter(team => team.captainId === currentUser.id || team.memberIds?.includes(currentUser.id));
+  const visibleTeams = activeTab === 'managed'
+    ? userTeams.filter(team => team.captainId === currentUser.id)
+    : userTeams;
+  const filteredTeams = visibleTeams.filter(team =>
+    team.name.toLowerCase().includes(search.toLowerCase()) ||
+    team.tag.toLowerCase().includes(search.toLowerCase())
   );
 
   const handleCreate = async (e: React.FormEvent) => {
@@ -75,7 +79,7 @@ export const TeamsView: React.FC<TeamsViewProps> = ({
 
       <div className="flex gap-2 overflow-x-auto border-b border-[#E5E7EB] pb-3">
         {[
-          ['mine', 'Mis equipos'], ['managed', 'Equipos que administro'], ['invites', 'Invitaciones'], ['history', 'Historial']
+          ['mine', 'Todos mis equipos'], ['managed', 'Solo donde soy capitán'], ['invites', 'Invitaciones'], ['history', 'Historial']
         ].map(([id, label]) => <button key={id} onClick={() => setActiveTab(id as typeof activeTab)} className={`shrink-0 rounded-full px-4 py-2 text-xs font-bold ${activeTab === id ? 'bg-black text-white' : 'border border-gray-200 bg-white text-gray-600'}`}>{label}{id === 'invites' && <span className="ml-2 rounded-full bg-black px-2 py-0.5 text-[10px] text-white">0</span>}</button>)}
       </div>
 
@@ -94,6 +98,8 @@ export const TeamsView: React.FC<TeamsViewProps> = ({
       {activeTab === 'invites' && <div className="rounded-2xl border border-[#E5E7EB] bg-[#F9FAFB] p-6 text-center text-xs font-bold">No tienes invitaciones pendientes.</div>}
 
       {activeTab === 'history' && <div className="rounded-2xl border border-[#E5E7EB] bg-[#F9FAFB] p-6 text-center text-xs font-bold">No hay equipos históricos registrados.</div>}
+
+      {activeTab === 'managed' && filteredTeams.length === 0 && <div className="rounded-2xl border border-[#E5E7EB] bg-[#F9FAFB] p-6 text-center text-xs font-bold">Todavía no eres capitán de ningún equipo.</div>}
 
       {/* Teams Grid */}
       {activeTab !== 'invites' && activeTab !== 'history' &&
