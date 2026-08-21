@@ -229,13 +229,18 @@ export const ProfileAthleteView: React.FC<ProfileAthleteViewProps> = ({
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
             <div className="p-4 bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl space-y-1">
-              <span className="text-[10px] uppercase font-bold text-gray-500">Nombre de Usuario</span>
+              <span className="text-[10px] uppercase font-bold text-gray-500">Nombre completo</span>
               <p className="font-bold text-black text-sm">{user.name}</p>
             </div>
 
             <div className="p-4 bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl space-y-1">
-              <span className="text-[10px] uppercase font-bold text-gray-500">GamerTag / Nickname</span>
+              <span className="text-[10px] uppercase font-bold text-gray-500">Usuario público único</span>
               <p className="font-bold text-black text-sm">{user.gamerTag}</p>
+            </div>
+
+            <div className="p-4 bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl space-y-1">
+              <span className="text-[10px] uppercase font-bold text-gray-500">ID de cuenta</span>
+              <p className="font-mono font-bold text-black text-sm">TX-{user.id.slice(0,8).toUpperCase()}</p>
             </div>
 
             <div className="p-4 bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl space-y-1">

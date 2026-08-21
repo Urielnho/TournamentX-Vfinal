@@ -395,7 +395,8 @@ export async function insertRegistration(tournamentId: string, _userId: string, 
 export async function insertTeam(tournamentId: string | undefined, captainId: string, name: string, tag: string, logoUrl?: string) {
   if (!supabase) throw new Error('Supabase no está configurado.');
   const { data, error } = await supabase.from('teams').insert({ tournament_id: tournamentId || null, captain_id: captainId, name, tag, logo_url: logoUrl || null, status: 'confirmed', payment_status: 'unpaid' }).select('id').single();
-  if (error) throw error;
+  if (error?.code === '23505') throw new Error('Ese nombre o tag de equipo ya está registrado. Elige otro.');
+  if (error) throw new Error(error.message);
   const { error: memberError } = await supabase.from('team_members').insert({ team_id: data.id, user_id: captainId, member_role: 'captain' });
   if (memberError) {
     await supabase.from('teams').delete().eq('id', data.id);

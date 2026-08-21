@@ -58,6 +58,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onClose }) => {
       return;
     }
 
+    const { data: available, error: availabilityError } = await supabase.rpc('is_gamer_tag_available', { candidate: gamerTag.trim() });
+    if (availabilityError) { setError('No se pudo validar el nombre de usuario. Intenta nuevamente.'); setLoading(false); return; }
+    if (!available) { setError('Ese nombre de usuario ya está ocupado. Elige otro.'); setLoading(false); return; }
     const { data, error: authError } = await supabase.auth.signUp({
       email: normalizedEmail,
       password,
