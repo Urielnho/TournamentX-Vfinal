@@ -221,8 +221,9 @@ export default function App() {
   const handleCreateTeam = async (name: string, tag: string, logoFile?: File) => {
     if (!authUser) { setShowAuthModal(true); throw new Error('Inicia sesión para crear un equipo.'); }
     const logoUrl = logoFile ? await uploadTeamLogo(logoFile) : undefined;
-    await insertTeam(undefined, authUser.id, name, tag, logoUrl);
+    const teamId = await insertTeam(undefined, authUser.id, name, tag, logoUrl);
     await refreshData(authUser.id);
+    return teamId;
   };
 
   const approveTeam = async (id: string) => { if (!supabase) return; await supabase.from('registrations').update({ status: 'confirmed' }).eq('id', id); await refreshData(authUser?.id); };

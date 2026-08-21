@@ -28,7 +28,7 @@ import {
 interface TeamsViewProps {
   teams: Team[];
   currentUser: UserProfile;
-  onCreateTeam: (name: string, tag: string, logoFile?: File) => Promise<void>;
+  onCreateTeam: (name: string, tag: string, logoFile?: File) => Promise<string>;
   onRefresh: () => Promise<void>;
 }
 type Tab = "mine" | "managed" | "explore" | "invites" | "requests";
@@ -52,6 +52,8 @@ export const TeamsView: React.FC<TeamsViewProps> = ({
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const [isCreating, setIsCreating] = useState(false);
+  const [createdTeam, setCreatedTeam] = useState<{id:string;name:string}|null>(null);
+  const [postCreateInvite, setPostCreateInvite] = useState("");
 
   const reloadCollaboration = useCallback(async () => {
     if (!currentUser.id) return;
@@ -144,22 +146,20 @@ export const TeamsView: React.FC<TeamsViewProps> = ({
     if (isCreating) return;
     setIsCreating(true);
     try {
-      await runAction(async () => {
-        await onCreateTeam(
-          teamName.trim(),
-          teamTag.toUpperCase(),
-          teamLogo || undefined,
-        );
-        setShowCreateModal(false);
-        setTeamName("");
-        setTeamTag("");
-        setTeamLogo(null);
-        confetti({ particleCount: 40, spread: 50 });
-      }, "Equipo creado correctamente.");
+      setError(""); setNotice("");
+      const createdName=teamName.trim();
+      const teamId=await onCreateTeam(createdName,teamTag.toUpperCase(),teamLogo||undefined);
+      setCreatedTeam({id:teamId,name:createdName});
+      setTeamName(""); setTeamTag(""); setTeamLogo(null);
+      setNotice("Equipo creado. Ahora puedes invitar a tus jugadores.");
+      confetti({ particleCount: 40, spread: 50 });
+    } catch(reason) {
+      setError(reason instanceof Error?reason.message:"No se pudo crear el equipo.");
     } finally {
       setIsCreating(false);
     }
   };
+  const closeCreateFlow=()=>{setShowCreateModal(false);setCreatedTeam(null);setPostCreateInvite("");};
   const confirmAction = (message: string, action: () => void) => {
     if (window.confirm(message)) action();
   };
@@ -545,13 +545,19 @@ export const TeamsView: React.FC<TeamsViewProps> = ({
           <div className="w-full max-w-md rounded-3xl bg-white p-6">
             <button
               disabled={isCreating}
-              onClick={() => setShowCreateModal(false)}
+              onClick={closeCreateFlow}
               className="float-right text-xl disabled:opacity-40"
             >
               ×
             </button>
-            <h3 className="text-lg font-black">Crear equipo reutilizable</h3>
-            <form onSubmit={handleCreate} className="mt-5 space-y-4 text-xs">
+            <h3 className="text-lg font-black">{createdTeam?`Invita jugadores a ${createdTeam.name}`:"Crear equipo reutilizable"}</h3>
+            {(notice||error)&&<div className={`mt-3 rounded-xl p-3 text-xs font-semibold ${error?"bg-red-50 text-red-700":"bg-green-50 text-green-800"}`}>{error||notice}</div>}
+            {createdTeam ? <div className="mt-5 space-y-4 text-xs">
+              <p className="text-gray-600">Invita ahora por usuario o correo. También puedes compartir un enlace.</p>
+              <div className="flex gap-2"><input value={postCreateInvite} onChange={e=>setPostCreateInvite(e.target.value)} placeholder="GamerTag o correo exacto" className="min-w-0 flex-1 rounded-xl border p-3"/><button disabled={!postCreateInvite.trim()} onClick={()=>void runAction(async()=>{await inviteTeamMember(createdTeam.id,postCreateInvite.trim());setPostCreateInvite("");},"Invitación enviada correctamente.")} className="rounded-xl bg-black px-4 font-bold text-white disabled:opacity-40">Invitar</button></div>
+              <button onClick={()=>void runAction(async()=>{const token=await createTeamInviteLink(createdTeam.id);await navigator.clipboard.writeText(`${window.location.origin}/equipos?invite=${token}`);},"Enlace de invitación copiado.")} className="flex w-full items-center justify-center gap-2 rounded-xl border p-3 font-bold"><Copy className="h-4 w-4"/>Copiar enlace para invitar</button>
+              <button onClick={closeCreateFlow} className="w-full rounded-full bg-black py-3 font-bold text-white">Terminar</button>
+            </div> : <form onSubmit={handleCreate} className="mt-5 space-y-4 text-xs">
               <input
                 required
                 minLength={2}
@@ -597,7 +603,7 @@ export const TeamsView: React.FC<TeamsViewProps> = ({
               >
                 {isCreating ? "Creando equipo…" : "Crear equipo"}
               </button>
-            </form>
+            </form>}
           </div>
         </div>
       )}
