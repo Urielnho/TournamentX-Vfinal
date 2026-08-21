@@ -259,7 +259,7 @@ export default function App() {
   const currentTournament = tournaments.find(tournament => tournament.id === selectedTournamentId);
   const currentParticipants = participants.filter(participant => !participant.tournamentId || participant.tournamentId === selectedTournamentId);
   return <div className="flex min-h-screen flex-col bg-white text-black selection:bg-black selection:text-white">
-    <Navbar currentView={currentView} onNavigate={handleNavigate} user={userProfile} authUser={authUser} onSignIn={() => setShowAuthModal(true)} onSignOut={handleSignOut} searchQuery={globalSearchQuery} onSearchQueryChange={setGlobalSearchQuery} onSearchSubmit={() => handleNavigate('tournaments')} />
+    <Navbar currentView={currentView} onNavigate={handleNavigate} user={userProfile} authUser={authUser} onSignIn={() => setShowAuthModal(true)} onSignOut={handleSignOut} searchQuery={globalSearchQuery} onSearchQueryChange={setGlobalSearchQuery} onSearchSubmit={() => handleNavigate('tournaments')} tournaments={tournaments} />
     <main className="flex-1 bg-[#f5f6f8] text-black">
       {dataError && <div className="mx-auto mt-4 max-w-4xl rounded-2xl border border-red-200 bg-red-50 px-5 py-3 text-sm font-semibold text-red-700">{dataError}</div>}
       {paymentNotice && <div className="mx-auto mt-4 flex max-w-4xl items-center justify-between gap-4 rounded-2xl border border-gray-200 bg-white px-5 py-3 text-sm font-semibold"><span>{paymentNotice}</span><button onClick={() => setPaymentNotice('')} className="text-xs text-gray-500">Cerrar</button></div>}

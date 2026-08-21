@@ -1,7 +1,8 @@
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { Tournament, ViewMode } from '../types';
 import { Search, Plus, Trophy, Users, ArrowRight, Calendar, Filter } from 'lucide-react';
 import { isRegistrationOpen, isViewOnlyTournament } from '../utils/tournamentAvailability';
+import { tournamentSearchScore } from '../utils/smartSearch';
 
 interface ExploreTournamentsViewProps {
   tournaments: Tournament[];
@@ -21,6 +22,7 @@ export const ExploreTournamentsView: React.FC<ExploreTournamentsViewProps> = ({
   const [sportFilter, setSportFilter] = useState('All Sports');
   const [statusFilter, setStatusFilter] = useState('All Status');
   const [selectedDiscipline, setSelectedDiscipline] = useState<string>('all');
+  useEffect(()=>{if(searchQuery.trim()){setStatusFilter('All Status');setSelectedDiscipline('all');}},[searchQuery]);
 
   const quickDisciplines = [
     { id: 'all', label: 'Todos' },
@@ -35,12 +37,14 @@ export const ExploreTournamentsView: React.FC<ExploreTournamentsViewProps> = ({
   const filteredTournaments = useMemo(() => {
     return tournaments.filter(t => {
       // Tab filter
-      if (activeTab === 'explorar' && !isRegistrationOpen(t)) return false;
-      if (activeTab === 'en_vivo' && !isViewOnlyTournament(t)) return false;
-      if (activeTab === 'participando' && !t.isUserRegistered) return false;
-      if (activeTab === 'organizando' && !t.isUserOrganizing) return false;
-      if (activeTab === 'historial' && t.status !== 'completed') return false;
-      if (activeTab !== 'historial' && statusFilter === 'All Status' && t.status === 'completed') return false;
+      if (!searchQuery.trim()) {
+        if (activeTab === 'explorar' && !isRegistrationOpen(t)) return false;
+        if (activeTab === 'en_vivo' && !isViewOnlyTournament(t)) return false;
+        if (activeTab === 'participando' && !t.isUserRegistered) return false;
+        if (activeTab === 'organizando' && !t.isUserOrganizing) return false;
+        if (activeTab === 'historial' && t.status !== 'completed') return false;
+        if (activeTab !== 'historial' && statusFilter === 'All Status' && t.status === 'completed') return false;
+      }
 
       // Quick Discipline filter
       if (selectedDiscipline !== 'all' && !t.game.toLowerCase().includes(selectedDiscipline.toLowerCase())) {
@@ -48,10 +52,7 @@ export const ExploreTournamentsView: React.FC<ExploreTournamentsViewProps> = ({
       }
 
       // Search query
-      const normalizedSearch = searchQuery.trim().toLocaleLowerCase('es-MX');
-      const searchableText = [t.title, t.game, t.gameMode, t.organizer.name, t.description].join(' ').toLocaleLowerCase('es-MX');
-      const matchSearch = normalizedSearch.split(/\s+/).every(term => searchableText.includes(term));
-      if (!matchSearch) return false;
+      if (tournamentSearchScore(t,searchQuery)===0) return false;
 
       // Sport filter
       if (sportFilter === 'Esports' && t.category !== 'esports') return false;
@@ -63,7 +64,7 @@ export const ExploreTournamentsView: React.FC<ExploreTournamentsViewProps> = ({
       if (statusFilter === 'Completed' && t.status !== 'completed') return false;
 
       return true;
-    });
+    }).sort((a,b)=>tournamentSearchScore(b,searchQuery)-tournamentSearchScore(a,searchQuery));
   }, [tournaments, activeTab, searchQuery, sportFilter, statusFilter, selectedDiscipline]);
 
   const navTabs: { id: TournamentTab; label: string; count: number }[] = [
