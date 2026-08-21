@@ -63,7 +63,24 @@ export interface TournamentLocation {
   region?: string;
   // Onsite
   venueName?: string;
+  city?: string;
   address?: string;
+}
+
+export interface MortalKombatConfig {
+  initialSetFormat: 'bo1' | 'bo3' | 'bo5';
+  finalSetFormat: 'bo1' | 'bo3' | 'bo5';
+  roundTimeSeconds: number;
+  stageSelection: 'random' | 'manual';
+  characterPolicy: 'all' | 'restricted';
+  restrictedCharacters: string[];
+  kameoPolicy: 'all' | 'restricted';
+  restrictedKameos: string[];
+  dlcAllowed: boolean;
+  winnerCharacterRule: 'keep_character_and_kameo';
+  loserCharacterRule: 'may_change_character_and_or_kameo';
+  platform: 'PC' | 'PlayStation 5' | 'Xbox Series X|S';
+  crossplay: boolean;
 }
 
 export interface TeamMember {
@@ -173,6 +190,7 @@ export interface Tournament {
   category: TournamentCategory;
   game: string;
   gameMode: string;
+  gameConfig?: MortalKombatConfig;
   format: TournamentFormat;
   status: TournamentStatus;
   accessType: AccessType; // Público o Privado

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Tournament, TournamentCategory, TournamentFormat, ViewMode, AccessType, EntryFeeType, PrizeType, Sponsor, TournamentLocation } from '../types';
+import { Tournament, TournamentCategory, TournamentFormat, ViewMode, AccessType, EntryFeeType, PrizeType, Sponsor, MortalKombatConfig } from '../types';
 import { GAMES_CATALOG } from '../data/mockData';
 import { Trophy, CheckCircle2, ArrowRight, ArrowLeft, Gamepad2, Layers, DollarSign, Calendar, Sparkles, Shield, Upload, Globe, MapPin, Tv, Plus, Trash2, AlertCircle, Info, Lock } from 'lucide-react';
 import confetti from 'canvas-confetti';
@@ -24,24 +24,35 @@ export const CreateTournamentWizard: React.FC<CreateTournamentWizardProps> = ({
   const [description, setDescription] = useState('');
   const [bannerUrl, setBannerUrl] = useState('');
   const [isUploadingBanner, setIsUploadingBanner] = useState(false);
-  const [hasStream, setHasStream] = useState(true);
+  const [hasStream, setHasStream] = useState(false);
   const [streamPlatform, setStreamPlatform] = useState<'twitch' | 'youtube'>('twitch');
-  const [streamUrl, setStreamUrl] = useState('https://twitch.tv/tournamentx_live');
-  const [channelName, setChannelName] = useState('TournamentX_Official');
+  const [streamUrl, setStreamUrl] = useState('');
+  const [channelName, setChannelName] = useState('');
 
   // Step 2: Categoría, Juego & Formato
   const [category, setCategory] = useState<TournamentCategory>('esports');
   const [selectedGameId, setSelectedGameId] = useState('lol');
   const [gameMode, setGameMode] = useState("5v5 Summoner's Rift Tournament Draft");
   const [format, setFormat] = useState<TournamentFormat>('single_elim');
+  const [mkConfig, setMkConfig] = useState<MortalKombatConfig>({
+    initialSetFormat: 'bo3', finalSetFormat: 'bo5', roundTimeSeconds: 60,
+    stageSelection: 'random', characterPolicy: 'all', restrictedCharacters: [],
+    kameoPolicy: 'all', restrictedKameos: [], dlcAllowed: true,
+    winnerCharacterRule: 'keep_character_and_kameo',
+    loserCharacterRule: 'may_change_character_and_or_kameo',
+    platform: 'PC', crossplay: true,
+  });
+  const [restrictedCharactersText, setRestrictedCharactersText] = useState('');
+  const [restrictedKameosText, setRestrictedKameosText] = useState('');
   
   // Ubicación
   const [locationType, setLocationType] = useState<'online' | 'onsite'>('online');
   const [onlinePlatform, setOnlinePlatform] = useState('PC');
-  const [onlineServer, setOnlineServer] = useState('Latam Norte / Bogotá');
-  const [onlineRegion, setOnlineRegion] = useState('América Latina');
-  const [venueName, setVenueName] = useState('Arena Esports México');
-  const [venueAddress, setVenueAddress] = useState('Insurgentes Sur 1200, Benito Juárez, CDMX');
+  const [onlineServer, setOnlineServer] = useState('');
+  const [onlineRegion, setOnlineRegion] = useState('');
+  const [venueName, setVenueName] = useState('');
+  const [venueCity, setVenueCity] = useState('');
+  const [venueAddress, setVenueAddress] = useState('');
 
   // Step 3: Fechas, Acceso y Cupos
   const [startDate, setStartDate] = useState('2026-11-15T18:00');
@@ -93,6 +104,14 @@ export const CreateTournamentWizard: React.FC<CreateTournamentWizardProps> = ({
       if (game.defaultRules) {
         setRules([...game.defaultRules]);
       }
+      if (gameId === 'mortalkombat') {
+        setFormat('double_elim');
+        setGameMode('Individual (1v1)');
+        setParticipantType('individual');
+        setMinPlayersPerTeam(1);
+        setMaxParticipants(16);
+        setOnlinePlatform(mkConfig.platform);
+      }
     }
   };
 
@@ -136,8 +155,10 @@ export const CreateTournamentWizard: React.FC<CreateTournamentWizardProps> = ({
     let error = '';
     if (step === 1 && (!tournamentName.trim() || !description.trim())) error = 'Completa el nombre y la descripción del torneo.';
     else if (step === 1 && hasStream && !streamUrl.trim()) error = 'Agrega el enlace de la transmisión o desactiva esta opción.';
-    else if (step === 2 && locationType === 'online' && (!onlinePlatform.trim() || !onlineServer.trim())) error = 'Indica la plataforma y el servidor del torneo en línea.';
-    else if (step === 2 && locationType === 'onsite' && (!venueName.trim() || !venueAddress.trim())) error = 'Indica el recinto y la dirección del torneo presencial.';
+    else if (step === 2 && locationType === 'online' && (!onlinePlatform.trim() || !onlineServer.trim() || !onlineRegion.trim())) error = 'Indica la plataforma, región y servidor del torneo en línea.';
+    else if (step === 2 && locationType === 'onsite' && (!venueCity.trim() || !venueName.trim() || !venueAddress.trim())) error = 'Indica la ciudad, el recinto y la dirección del torneo presencial.';
+    else if (step === 2 && selectedGameId === 'mortalkombat' && mkConfig.characterPolicy === 'restricted' && !restrictedCharactersText.trim()) error = 'Indica qué personajes estarán restringidos.';
+    else if (step === 2 && selectedGameId === 'mortalkombat' && mkConfig.kameoPolicy === 'restricted' && !restrictedKameosText.trim()) error = 'Indica qué Kameos estarán restringidos.';
     else if (step === 3 && (!startDate || !endDate || !registrationDeadline)) error = 'Completa las fechas del torneo y de inscripción.';
     else if (step === 3 && new Date(endDate) <= new Date(startDate)) error = 'La fecha de finalización debe ser posterior al inicio.';
     else if (step === 3 && new Date(registrationDeadline) > new Date(startDate)) error = 'El cierre de inscripciones no puede ser posterior al inicio.';
@@ -163,6 +184,11 @@ export const CreateTournamentWizard: React.FC<CreateTournamentWizardProps> = ({
       description: description.trim(),
       game: selectedGame.name,
       gameMode: gameMode,
+      gameConfig: selectedGameId === 'mortalkombat' ? {
+        ...mkConfig,
+        restrictedCharacters: mkConfig.characterPolicy === 'restricted' ? restrictedCharactersText.split(',').map(value => value.trim()).filter(Boolean) : [],
+        restrictedKameos: mkConfig.kameoPolicy === 'restricted' ? restrictedKameosText.split(',').map(value => value.trim()).filter(Boolean) : [],
+      } : undefined,
       category: category,
       format: format,
       status: prizeType === 'monetary' && basePrizePool > 0 ? 'draft' : 'open',
@@ -174,6 +200,7 @@ export const CreateTournamentWizard: React.FC<CreateTournamentWizardProps> = ({
         server: locationType === 'online' ? onlineServer : undefined,
         region: locationType === 'online' ? onlineRegion : undefined,
         venueName: locationType === 'onsite' ? venueName : undefined,
+        city: locationType === 'onsite' ? venueCity : undefined,
         address: locationType === 'onsite' ? venueAddress : undefined,
       },
       stream: hasStream ? {
@@ -513,16 +540,60 @@ export const CreateTournamentWizard: React.FC<CreateTournamentWizardProps> = ({
                   className="w-full bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl p-3 text-xs text-black outline-none font-medium"
                 >
                   <option value="single_elim">Eliminación directa (Single Elimination)</option>
-                  <option value="double_elim">Doble eliminación (Winners & Losers)</option>
+                  <option value="double_elim">Doble eliminación (recomendado para MK1)</option>
                   <option value="group_stage">Fase de grupos</option>
                   <option value="groups_elim">Fase de grupos + eliminación</option>
                   <option value="round_robin">Todos contra todos (Round Robin)</option>
-                  <option value="league">Liga por puntos</option>
-                  <option value="battle_royale">Battle Royale</option>
-                  <option value="custom">Formato personalizado</option>
+                  {selectedGameId !== 'mortalkombat' && <option value="league">Liga por puntos</option>}
+                  {selectedGameId !== 'mortalkombat' && <option value="battle_royale">Battle Royale</option>}
+                  {selectedGameId !== 'mortalkombat' && <option value="custom">Formato personalizado</option>}
                 </select>
               </div>
             </div>
+
+            {selectedGameId === 'mortalkombat' && (
+              <div className="space-y-4 rounded-3xl border border-[#E5E7EB] bg-[#F9FAFB] p-5">
+                <div>
+                  <h3 className="text-sm font-black text-black">Configuración de Mortal Kombat 1</h3>
+                  <p className="text-[11px] text-gray-500">Individual 1v1 · 2 jugadores por partida. Doble eliminación es el formato recomendado.</p>
+                </div>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  <label className="space-y-1 text-[10px] font-bold uppercase text-gray-600">Fase inicial
+                    <select value={mkConfig.initialSetFormat} onChange={e => setMkConfig({...mkConfig, initialSetFormat: e.target.value as MortalKombatConfig['initialSetFormat']})} className="w-full rounded-xl border border-[#E5E7EB] bg-white p-3 text-xs normal-case text-black"><option value="bo1">Best of 1</option><option value="bo3">Best of 3</option><option value="bo5">Best of 5</option></select>
+                  </label>
+                  <label className="space-y-1 text-[10px] font-bold uppercase text-gray-600">Fase final
+                    <select value={mkConfig.finalSetFormat} onChange={e => setMkConfig({...mkConfig, finalSetFormat: e.target.value as MortalKombatConfig['finalSetFormat']})} className="w-full rounded-xl border border-[#E5E7EB] bg-white p-3 text-xs normal-case text-black"><option value="bo1">Best of 1</option><option value="bo3">Best of 3</option><option value="bo5">Best of 5</option></select>
+                  </label>
+                  <label className="space-y-1 text-[10px] font-bold uppercase text-gray-600">Tiempo por ronda
+                    <input type="number" min={30} max={300} value={mkConfig.roundTimeSeconds} onChange={e => setMkConfig({...mkConfig, roundTimeSeconds: Math.max(30, Number(e.target.value))})} className="w-full rounded-xl border border-[#E5E7EB] bg-white p-3 text-xs normal-case text-black" />
+                  </label>
+                  <label className="space-y-1 text-[10px] font-bold uppercase text-gray-600">Escenario
+                    <select value={mkConfig.stageSelection} onChange={e => setMkConfig({...mkConfig, stageSelection: e.target.value as MortalKombatConfig['stageSelection']})} className="w-full rounded-xl border border-[#E5E7EB] bg-white p-3 text-xs normal-case text-black"><option value="random">Aleatorio</option><option value="manual">Selección manual</option></select>
+                  </label>
+                  <label className="space-y-1 text-[10px] font-bold uppercase text-gray-600">Personajes
+                    <select value={mkConfig.characterPolicy} onChange={e => setMkConfig({...mkConfig, characterPolicy: e.target.value as MortalKombatConfig['characterPolicy']})} className="w-full rounded-xl border border-[#E5E7EB] bg-white p-3 text-xs normal-case text-black"><option value="all">Todos permitidos</option><option value="restricted">Personajes restringidos</option></select>
+                  </label>
+                  <label className="space-y-1 text-[10px] font-bold uppercase text-gray-600">Kameos
+                    <select value={mkConfig.kameoPolicy} onChange={e => setMkConfig({...mkConfig, kameoPolicy: e.target.value as MortalKombatConfig['kameoPolicy']})} className="w-full rounded-xl border border-[#E5E7EB] bg-white p-3 text-xs normal-case text-black"><option value="all">Todos permitidos</option><option value="restricted">Kameos restringidos</option></select>
+                  </label>
+                  <label className="space-y-1 text-[10px] font-bold uppercase text-gray-600">DLC
+                    <select value={mkConfig.dlcAllowed ? 'yes' : 'no'} onChange={e => setMkConfig({...mkConfig, dlcAllowed: e.target.value === 'yes'})} className="w-full rounded-xl border border-[#E5E7EB] bg-white p-3 text-xs normal-case text-black"><option value="yes">Permitido</option><option value="no">No permitido</option></select>
+                  </label>
+                  <label className="space-y-1 text-[10px] font-bold uppercase text-gray-600">Plataforma
+                    <select value={mkConfig.platform} onChange={e => { const platform = e.target.value as MortalKombatConfig['platform']; setMkConfig({...mkConfig, platform}); setOnlinePlatform(platform); }} className="w-full rounded-xl border border-[#E5E7EB] bg-white p-3 text-xs normal-case text-black"><option>PC</option><option>PlayStation 5</option><option>Xbox Series X|S</option></select>
+                  </label>
+                  <label className="space-y-1 text-[10px] font-bold uppercase text-gray-600">Crossplay
+                    <select value={mkConfig.crossplay ? 'on' : 'off'} onChange={e => setMkConfig({...mkConfig, crossplay: e.target.value === 'on'})} className="w-full rounded-xl border border-[#E5E7EB] bg-white p-3 text-xs normal-case text-black"><option value="on">Activado</option><option value="off">Desactivado</option></select>
+                  </label>
+                </div>
+                {mkConfig.characterPolicy === 'restricted' && <input value={restrictedCharactersText} onChange={e => setRestrictedCharactersText(e.target.value)} placeholder="Personajes restringidos, separados por coma" className="w-full rounded-xl border border-[#E5E7EB] bg-white p-3 text-xs" />}
+                {mkConfig.kameoPolicy === 'restricted' && <input value={restrictedKameosText} onChange={e => setRestrictedKameosText(e.target.value)} placeholder="Kameos restringidos, separados por coma" className="w-full rounded-xl border border-[#E5E7EB] bg-white p-3 text-xs" />}
+                <div className="rounded-2xl border border-[#E5E7EB] bg-white p-4 text-xs text-gray-700">
+                  <p><b>Ganador:</b> mantiene personaje y Kameo.</p>
+                  <p className="mt-1"><b>Perdedor:</b> puede cambiar personaje y/o Kameo.</p>
+                </div>
+              </div>
+            )}
 
             <div className="space-y-3 pt-4 border-t border-[#E5E7EB]">
               <label className="text-xs font-bold text-black uppercase">Ubicación del torneo</label>
@@ -540,7 +611,8 @@ export const CreateTournamentWizard: React.FC<CreateTournamentWizardProps> = ({
                   <input value={onlineRegion} onChange={e => setOnlineRegion(e.target.value)} placeholder="Región" className="rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] p-3 text-xs outline-none" />
                 </div>
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <input value={venueCity} onChange={e => setVenueCity(e.target.value)} placeholder="Ciudad" className="rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] p-3 text-xs outline-none" />
                   <input value={venueName} onChange={e => setVenueName(e.target.value)} placeholder="Nombre del recinto" className="rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] p-3 text-xs outline-none" />
                   <input value={venueAddress} onChange={e => setVenueAddress(e.target.value)} placeholder="Dirección completa" className="rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] p-3 text-xs outline-none" />
                 </div>
@@ -615,11 +687,13 @@ export const CreateTournamentWizard: React.FC<CreateTournamentWizardProps> = ({
                 <select
                   value={participantType}
                   onChange={(e) => setParticipantType(e.target.value as 'individual' | 'team')}
+                  disabled={selectedGameId === 'mortalkombat'}
                   className="w-full bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl p-3 text-xs text-black outline-none font-bold"
                 >
                   <option value="team">Por Equipos (Squad / Team)</option>
                   <option value="individual">Individual (1v1 / Solo)</option>
                 </select>
+                {selectedGameId === 'mortalkombat' && <p className="text-[11px] text-gray-500">MK1 siempre se registra como individual 1v1.</p>}
               </div>
             </div>
 

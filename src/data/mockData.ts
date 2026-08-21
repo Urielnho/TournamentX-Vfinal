@@ -212,9 +212,11 @@ export const GAMES_CATALOG = [
     imageUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuAS5AOXFhCvgLGyNNos_JkAMX28DKy70xSER5PqdCrTSqzs9ml0Ri8mnJSXgNO8P5MY-EiQSLsoqHXIAKujiqW-s2HkxIDOccoytdnNo6i30sTpg9HeOVDk9CcYFRPBZY0nxplISxYyMNXK5FfDCuDOQds5_vgQtIAAaLKhMj7guLJdb_kjX8DzKCanIsszOJx8T8O9EAfVR1hBN_eLtgoT-VJTCWtZdsbzJeQa319-lqcjTY_AXb9i',
     modes: ["Individual (1v1)", "1v1 Torneo Doble Eliminación"],
     defaultRules: [
-      "Formato 1v1 al mejor de 3 rondas, First to 3 (FT3) sets.",
-      "El ganador del set debe mantener el mismo personaje; el perdedor puede cambiar personaje y Kameo.",
-      "Conexión por cable Ethernet obligatoria (No Wi-Fi)."
+      "Macros y Turbo: prohibidos.",
+      "Cheats y Bots: prohibidos.",
+      "Coaching durante el combate: prohibido.",
+      "Las pausas reciben penalización según las reglas del torneo.",
+      "El abandono del combate cuenta como derrota."
     ]
   },
   {

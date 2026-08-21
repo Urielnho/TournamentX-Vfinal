@@ -29,6 +29,7 @@ Deno.serve(async request => {
   const admin = createClient(supabaseUrl, serviceKey);
   const { data: tournament, error: tournamentError } = await admin.from('tournaments').select('*').eq('id', payload.tournamentId).single();
   if (tournamentError || !tournament) return jsonResponse(request, { error: 'El torneo no existe.' }, 404);
+  if (tournament.organizer_id === authData.user.id) return jsonResponse(request, { error: 'El organizador no puede participar en su propio torneo.' }, 403);
   if (tournament.status !== 'open') return jsonResponse(request, { error: 'Las inscripciones no están abiertas.' }, 409);
   if (new Date(tournament.registration_deadline).getTime() <= Date.now()) return jsonResponse(request, { error: 'Las inscripciones ya cerraron.' }, 409);
   if (tournament.entry_fee_type === 'free' || Number(tournament.entry_fee_amount) <= 0) return jsonResponse(request, { error: 'Este torneo no requiere pago.' }, 409);

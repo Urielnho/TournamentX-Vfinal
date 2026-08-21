@@ -151,6 +151,8 @@ export default function App() {
     if (!authUser) { setShowAuthModal(true); throw new Error('Inicia sesión para inscribirte.'); }
     const tournament = tournaments.find(item => item.id === tournamentId);
     if (!tournament) throw new Error('El torneo ya no está disponible.');
+    if (tournament.organizerId === authUser.id) throw new Error('El organizador no puede participar en su propio torneo.');
+    if (type !== tournament.participantType) throw new Error(tournament.participantType === 'individual' ? 'Este torneo solo acepta inscripciones individuales.' : 'Este torneo solo acepta inscripciones por equipo.');
     const existingTeam = type === 'team' ? teams.find(team => team.tournamentId === tournamentId && team.captainId === authUser.id && team.name.toLowerCase() === teamName.trim().toLowerCase()) : undefined;
     const teamId = type === 'team' ? existingTeam?.id || await insertTeam(tournamentId, authUser.id, teamName, teamName.slice(0, 5).toUpperCase()) : undefined;
     if (tournament.entryFeeType !== 'free' && tournament.entryFeeAmount > 0) {

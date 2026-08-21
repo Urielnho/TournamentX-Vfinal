@@ -25,6 +25,15 @@ function getStreamPresentation(stream?: Tournament['stream']) {
   } catch { return null; }
 }
 
+const formatLabels: Record<Tournament['format'], string> = {
+  single_elim: 'Eliminación directa', double_elim: 'Doble eliminación',
+  group_stage: 'Fase de grupos', groups_elim: 'Fase de grupos + eliminación',
+  league: 'Liga por puntos', round_robin: 'Todos contra todos',
+  battle_royale: 'Battle Royale', custom: 'Personalizado',
+};
+
+const setLabels = { bo1: 'Best of 1 (Bo1)', bo3: 'Best of 3 (Bo3)', bo5: 'Best of 5 (Bo5)' } as const;
+
 interface TournamentDetailViewProps {
   tournament: Tournament;
   matches: Match[];
@@ -147,7 +156,7 @@ export const TournamentDetailView: React.FC<TournamentDetailViewProps> = ({
                 Administrar torneo
               </button> : registrationOpen ? <button
                 onClick={() => {
-                  setRegType('team');
+                  setRegType(tournament.participantType);
                   setShowRegisterModal(true);
                 }}
                 className="px-6 py-2.5 rounded-full bg-white text-black font-bold text-xs uppercase tracking-wider hover:bg-gray-200 active:scale-95 transition-all shadow-md flex items-center gap-2 cursor-pointer"
@@ -175,7 +184,7 @@ export const TournamentDetailView: React.FC<TournamentDetailViewProps> = ({
 
           <div className="bg-[#F9FAFB] border border-[#E5E7EB] p-3.5 rounded-2xl">
             <span className="text-[10px] uppercase font-bold text-gray-500 block">Participantes</span>
-            <span className="text-base font-bold text-black">{tournament.participantsCount} / {tournament.maxParticipants} Equipos</span>
+            <span className="text-base font-bold text-black">{tournament.participantsCount} / {tournament.maxParticipants} {tournament.participantType === 'individual' ? 'Jugadores' : 'Equipos'}</span>
           </div>
 
           <div className="bg-[#F9FAFB] border border-[#E5E7EB] p-3.5 rounded-2xl">
@@ -231,19 +240,19 @@ export const TournamentDetailView: React.FC<TournamentDetailViewProps> = ({
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                   <div className="bg-[#F9FAFB] border border-[#E5E7EB] p-3.5 rounded-2xl">
                     <span className="text-gray-500 block text-[10px] uppercase font-bold">Tipo de Llave</span>
-                    <span className="text-black font-bold mt-0.5 block">Double Elimination</span>
+                    <span className="text-black font-bold mt-0.5 block">{formatLabels[tournament.format]}</span>
                   </div>
                   <div className="bg-[#F9FAFB] border border-[#E5E7EB] p-3.5 rounded-2xl">
                     <span className="text-gray-500 block text-[10px] uppercase font-bold">Modalidad</span>
-                    <span className="text-black font-bold mt-0.5 block">{tournament.minPlayersPerTeam}v{tournament.minPlayersPerTeam} ({tournament.gameMode})</span>
+                    <span className="text-black font-bold mt-0.5 block">{tournament.gameMode}</span>
                   </div>
                   <div className="bg-[#F9FAFB] border border-[#E5E7EB] p-3.5 rounded-2xl">
                     <span className="text-gray-500 block text-[10px] uppercase font-bold">Clasificatorias</span>
-                    <span className="text-black font-bold mt-0.5 block">Best of 3 (Bo3)</span>
+                    <span className="text-black font-bold mt-0.5 block">{tournament.gameConfig ? setLabels[tournament.gameConfig.initialSetFormat] : 'Según reglamento'}</span>
                   </div>
                   <div className="bg-[#F9FAFB] border border-[#E5E7EB] p-3.5 rounded-2xl">
                     <span className="text-gray-500 block text-[10px] uppercase font-bold">Gran Final</span>
-                    <span className="text-black font-bold mt-0.5 block">Best of 5 (Bo5)</span>
+                    <span className="text-black font-bold mt-0.5 block">{tournament.gameConfig ? setLabels[tournament.gameConfig.finalSetFormat] : 'Según reglamento'}</span>
                   </div>
                 </div>
               </div>
@@ -251,11 +260,10 @@ export const TournamentDetailView: React.FC<TournamentDetailViewProps> = ({
 
             <div className="flex flex-col gap-6">
               <div className="bg-white p-6 rounded-3xl border border-[#E5E7EB] space-y-4 shadow-xs">
-                <h3 className="text-base font-extrabold text-black">Registro Inmediato</h3>
-                <p className="text-xs text-gray-600">
-                  Inscribe a tu equipo o súmate a la bolsa de agentes libres.
-                </p>
-                <button 
+                <h3 className="text-base font-extrabold text-black">{tournament.isUserOrganizing ? 'Gestión del torneo' : 'Registro Inmediato'}</h3>
+                {tournament.isUserOrganizing ? <><p className="text-xs text-gray-600">Como organizador administras esta competencia y no puedes inscribirte como participante.</p><button onClick={() => onNavigate('organizer-dashboard', tournament.id)} className="w-full rounded-full bg-black py-3 text-xs font-bold text-white">Administrar torneo</button></> : registrationOpen ? <>
+                <p className="text-xs text-gray-600">{tournament.participantType === 'individual' ? 'Regístrate como jugador individual.' : 'Inscribe al equipo del que eres capitán.'}</p>
+                {tournament.participantType === 'team' && <button
                   onClick={() => {
                     setRegType('team');
                     setShowRegisterModal(true);
@@ -263,8 +271,8 @@ export const TournamentDetailView: React.FC<TournamentDetailViewProps> = ({
                   className="w-full py-3 rounded-full bg-black text-white font-bold text-xs hover:bg-gray-800 active:scale-95 transition-all shadow-xs cursor-pointer"
                 >
                   Inscribir Equipo Completo
-                </button>
-                <button 
+                </button>}
+                {tournament.participantType === 'individual' && <button
                   onClick={() => {
                     setRegType('individual');
                     setShowRegisterModal(true);
@@ -272,10 +280,23 @@ export const TournamentDetailView: React.FC<TournamentDetailViewProps> = ({
                   className="w-full py-3 rounded-full bg-white border border-[#E5E7EB] text-black font-bold text-xs hover:bg-gray-100 transition-colors cursor-pointer"
                 >
                   Inscribirme como Agente Libre
-                </button>
+                </button>}
+                </> : <p className="rounded-xl bg-[#F9FAFB] p-4 text-xs font-semibold text-gray-600">Las inscripciones terminaron. Este torneo está disponible solo para seguimiento.</p>}
+                </div>
               </div>
+              {tournament.game === 'Mortal Kombat 1' && tournament.gameConfig && <div className="bg-white p-6 rounded-3xl border border-[#E5E7EB] space-y-4 shadow-xs lg:col-span-3">
+                <h3 className="text-base font-extrabold">Configuración de Mortal Kombat 1</h3>
+                <div className="grid grid-cols-1 gap-3 text-xs sm:grid-cols-2 lg:grid-cols-3">
+                  <div className="rounded-2xl bg-[#F9FAFB] p-3"><b>Ronda:</b> {tournament.gameConfig.roundTimeSeconds} segundos</div>
+                  <div className="rounded-2xl bg-[#F9FAFB] p-3"><b>Escenario:</b> {tournament.gameConfig.stageSelection === 'random' ? 'Aleatorio' : 'Selección manual'}</div>
+                  <div className="rounded-2xl bg-[#F9FAFB] p-3"><b>DLC:</b> {tournament.gameConfig.dlcAllowed ? 'Permitido' : 'No permitido'}</div>
+                  <div className="rounded-2xl bg-[#F9FAFB] p-3"><b>Personajes:</b> {tournament.gameConfig.characterPolicy === 'all' ? 'Todos permitidos' : `Restringidos: ${tournament.gameConfig.restrictedCharacters.join(', ')}`}</div>
+                  <div className="rounded-2xl bg-[#F9FAFB] p-3"><b>Kameos:</b> {tournament.gameConfig.kameoPolicy === 'all' ? 'Todos permitidos' : `Restringidos: ${tournament.gameConfig.restrictedKameos.join(', ')}`}</div>
+                  <div className="rounded-2xl bg-[#F9FAFB] p-3"><b>Plataforma:</b> {tournament.gameConfig.platform} · Crossplay {tournament.gameConfig.crossplay ? 'activado' : 'desactivado'}</div>
+                </div>
+                <div className="rounded-2xl border border-[#E5E7EB] p-4 text-xs text-gray-700"><p><b>Ganador:</b> mantiene personaje y Kameo.</p><p className="mt-1"><b>Perdedor:</b> puede cambiar personaje y/o Kameo.</p></div>
+              </div>}
             </div>
-          </div>
         )}
 
         {/* Tab 2: BRACKET */}
@@ -328,12 +349,7 @@ export const TournamentDetailView: React.FC<TournamentDetailViewProps> = ({
         {activeTab === 'reglas' && (
           <div className="bg-white p-6 rounded-3xl border border-[#E5E7EB] space-y-4 text-xs text-black">
             <h3 className="text-base font-extrabold">Reglamento Oficial del Torneo</h3>
-            <ul className="list-disc pl-5 space-y-2 text-gray-600">
-              <li>Todos los jugadores deben estar presentes 15 minutos antes de la hora pactada para el check-in.</li>
-              <li>El uso de software de terceros para obtener ventajas injustas (cheats/hacks) resultará en descalificación inmediata.</li>
-              <li>Ambos capitanes deben subir captura de pantalla de los resultados de cada mapa.</li>
-              <li>Las pausas técnicas están limitadas a un máximo de 5 minutos por equipo por mapa.</li>
-            </ul>
+            {tournament.rules.length > 0 ? <ul className="list-disc pl-5 space-y-2 text-gray-600">{tournament.rules.map((rule, index) => <li key={`${index}-${rule}`}>{rule}</li>)}</ul> : <p className="text-gray-500">El organizador todavía no ha publicado reglas.</p>}
           </div>
         )}
 
@@ -376,6 +392,7 @@ export const TournamentDetailView: React.FC<TournamentDetailViewProps> = ({
                 <div>
                   <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Tipo de Registro</label>
                   <div className="flex gap-2">
+                    {tournament.participantType === 'team' &&
                     <button
                       type="button"
                       onClick={() => setRegType('team')}
@@ -384,7 +401,8 @@ export const TournamentDetailView: React.FC<TournamentDetailViewProps> = ({
                       }`}
                     >
                       Equipo Completo
-                    </button>
+                    </button>}
+                    {tournament.participantType === 'individual' &&
                     <button
                       type="button"
                       onClick={() => setRegType('individual')}
@@ -393,7 +411,7 @@ export const TournamentDetailView: React.FC<TournamentDetailViewProps> = ({
                       }`}
                     >
                       Agente Libre
-                    </button>
+                    </button>}
                   </div>
                 </div>
 
