@@ -45,17 +45,14 @@ export const CreateTournamentWizard: React.FC<CreateTournamentWizardProps> = ({
   
   // Ubicación
   const [locationType, setLocationType] = useState<'online' | 'onsite'>('online');
-  const [onlinePlatform, setOnlinePlatform] = useState('PC');
-  const [onlineServer, setOnlineServer] = useState('');
   const [onlineRegion, setOnlineRegion] = useState('');
   const [venueName, setVenueName] = useState('');
-  const [venueCity, setVenueCity] = useState('');
   const [venueAddress, setVenueAddress] = useState('');
 
   // Step 3: Fechas, Acceso y Cupos
-  const [startDate, setStartDate] = useState('2026-11-15T18:00');
-  const [endDate, setEndDate] = useState('2026-11-18T23:00');
-  const [registrationDeadline, setRegistrationDeadline] = useState('2026-11-14T23:59');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [registrationDeadline, setRegistrationDeadline] = useState('');
   const [accessType, setAccessType] = useState<AccessType>('public');
   const [participantType, setParticipantType] = useState<'individual' | 'team'>('team');
   const [maxParticipants, setMaxParticipants] = useState(16);
@@ -89,6 +86,12 @@ export const CreateTournamentWizard: React.FC<CreateTournamentWizardProps> = ({
   const [formError, setFormError] = useState('');
 
   const selectedGame = GAMES_CATALOG.find(g => g.id === selectedGameId) || GAMES_CATALOG[0];
+  const todayMinimum = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(new Date().getDate()).padStart(2, '0')}T00:00`;
+
+  const handleStartDateChange = (value: string) => {
+    setStartDate(value);
+    if (endDate && endDate < value) setEndDate(value);
+  };
 
   const handleGameSelect = (gameId: string) => {
     setSelectedGameId(gameId);
@@ -108,7 +111,6 @@ export const CreateTournamentWizard: React.FC<CreateTournamentWizardProps> = ({
         setParticipantType('individual');
         setMinPlayersPerTeam(1);
         setMaxParticipants(16);
-        setOnlinePlatform(mkConfig.platform);
       }
     }
   };
@@ -153,10 +155,11 @@ export const CreateTournamentWizard: React.FC<CreateTournamentWizardProps> = ({
     let error = '';
     if (step === 1 && (!tournamentName.trim() || !description.trim())) error = 'Completa el nombre y la descripción del torneo.';
     else if (step === 1 && hasStream && !streamUrl.trim()) error = 'Agrega el enlace de la transmisión o desactiva esta opción.';
-    else if (step === 2 && locationType === 'online' && (!onlinePlatform.trim() || !onlineServer.trim() || !onlineRegion.trim())) error = 'Indica la plataforma, región y servidor del torneo en línea.';
-    else if (step === 2 && locationType === 'onsite' && (!venueCity.trim() || !venueName.trim() || !venueAddress.trim())) error = 'Indica la ciudad, el recinto y la dirección del torneo presencial.';
+    else if (step === 2 && locationType === 'online' && !onlineRegion.trim()) error = 'Selecciona la región del torneo en línea.';
+    else if (step === 2 && locationType === 'onsite' && (!venueName.trim() || !venueAddress.trim())) error = 'Indica el recinto y la dirección del torneo presencial.';
     else if (step === 3 && (!startDate || !endDate || !registrationDeadline)) error = 'Completa las fechas del torneo y de inscripción.';
-    else if (step === 3 && new Date(endDate) <= new Date(startDate)) error = 'La fecha de finalización debe ser posterior al inicio.';
+    else if (step === 3 && [startDate, endDate, registrationDeadline].some(value => value < todayMinimum)) error = 'No puedes seleccionar días anteriores a hoy.';
+    else if (step === 3 && new Date(endDate) < new Date(startDate)) error = 'La fecha de finalización no puede ser anterior al inicio.';
     else if (step === 3 && new Date(registrationDeadline) > new Date(startDate)) error = 'El cierre de inscripciones no puede ser posterior al inicio.';
     else if (step === 3 && maxParticipants < 2) error = 'El torneo necesita al menos dos participantes.';
     else if (step === 3 && rules.length === 0) error = 'Agrega al menos una regla.';
@@ -192,11 +195,8 @@ export const CreateTournamentWizard: React.FC<CreateTournamentWizardProps> = ({
       bannerUrl: bannerUrl.trim() || selectedGame.imageUrl,
       location: {
         type: locationType,
-        platform: locationType === 'online' ? onlinePlatform : undefined,
-        server: locationType === 'online' ? onlineServer : undefined,
         region: locationType === 'online' ? onlineRegion : undefined,
         venueName: locationType === 'onsite' ? venueName : undefined,
-        city: locationType === 'onsite' ? venueCity : undefined,
         address: locationType === 'onsite' ? venueAddress : undefined,
       },
       stream: hasStream ? {
@@ -410,7 +410,7 @@ export const CreateTournamentWizard: React.FC<CreateTournamentWizardProps> = ({
                       type="text"
                       value={channelName}
                       onChange={(e) => setChannelName(e.target.value)}
-                      placeholder="Ej. TournamentX_Official"
+                      placeholder="Canal / nombre"
                       className="w-full bg-white border border-[#E5E7EB] rounded-xl p-2.5 text-xs text-black outline-none"
                     />
                   </div>
@@ -574,14 +574,9 @@ export const CreateTournamentWizard: React.FC<CreateTournamentWizardProps> = ({
                 ))}
               </div>
               {locationType === 'online' ? (
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <input value={onlinePlatform} onChange={e => setOnlinePlatform(e.target.value)} placeholder="Plataforma" className="rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] p-3 text-xs outline-none" />
-                  <input value={onlineServer} onChange={e => setOnlineServer(e.target.value)} placeholder="Servidor" className="rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] p-3 text-xs outline-none" />
-                  <input value={onlineRegion} onChange={e => setOnlineRegion(e.target.value)} placeholder="Región" className="rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] p-3 text-xs outline-none" />
-                </div>
+                <select value={onlineRegion} onChange={e => setOnlineRegion(e.target.value)} className="w-full rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] p-3 text-xs outline-none"><option value="">Selecciona una región</option><option value="Norteamérica">Norteamérica</option><option value="Sudamérica">Sudamérica</option><option value="Europa">Europa</option></select>
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <input value={venueCity} onChange={e => setVenueCity(e.target.value)} placeholder="Ciudad" className="rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] p-3 text-xs outline-none" />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <input value={venueName} onChange={e => setVenueName(e.target.value)} placeholder="Nombre del recinto" className="rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] p-3 text-xs outline-none" />
                   <input value={venueAddress} onChange={e => setVenueAddress(e.target.value)} placeholder="Dirección completa" className="rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] p-3 text-xs outline-none" />
                 </div>
@@ -597,12 +592,28 @@ export const CreateTournamentWizard: React.FC<CreateTournamentWizardProps> = ({
               <div className="space-y-1.5">
                 <label className="text-xs font-bold text-black uppercase flex items-center gap-1">
                   <Calendar className="w-3.5 h-3.5 text-black" />
+                  <span>Cierre Inscripciones</span>
+                </label>
+                <input 
+                  type="datetime-local" 
+                  value={registrationDeadline}
+                  min={todayMinimum}
+                  max={startDate || undefined}
+                  onChange={(e) => setRegistrationDeadline(e.target.value)}
+                  className="w-full bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl p-3 text-xs text-black outline-none"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-black uppercase flex items-center gap-1">
+                  <Calendar className="w-3.5 h-3.5 text-black" />
                   <span>Inicio del Torneo</span>
                 </label>
                 <input 
                   type="datetime-local" 
                   value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
+                  min={registrationDeadline || todayMinimum}
+                  onChange={(e) => handleStartDateChange(e.target.value)}
                   className="w-full bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl p-3 text-xs text-black outline-none"
                 />
               </div>
@@ -615,20 +626,8 @@ export const CreateTournamentWizard: React.FC<CreateTournamentWizardProps> = ({
                 <input 
                   type="datetime-local" 
                   value={endDate}
+                  min={startDate || registrationDeadline || todayMinimum}
                   onChange={(e) => setEndDate(e.target.value)}
-                  className="w-full bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl p-3 text-xs text-black outline-none"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-black uppercase flex items-center gap-1">
-                  <Calendar className="w-3.5 h-3.5 text-black" />
-                  <span>Cierre Inscripciones</span>
-                </label>
-                <input 
-                  type="datetime-local" 
-                  value={registrationDeadline}
-                  onChange={(e) => setRegistrationDeadline(e.target.value)}
                   className="w-full bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl p-3 text-xs text-black outline-none"
                 />
               </div>
