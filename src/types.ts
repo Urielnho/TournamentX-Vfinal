@@ -183,8 +183,8 @@ export interface PrizeBreakdownItem {
 
 export interface Tournament {
   id: string;
-  title: string; // Max 20 chars
-  description: string; // Max 50 chars
+  title: string; // Max 50 chars
+  description: string; // Max 80 chars
   subtitle?: string;
   bannerUrl: string;
   category: TournamentCategory;

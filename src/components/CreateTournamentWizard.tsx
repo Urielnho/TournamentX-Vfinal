@@ -326,12 +326,12 @@ export const CreateTournamentWizard: React.FC<CreateTournamentWizardProps> = ({
                   <span className="text-black font-black">*</span>
                 </label>
                 <span className="text-xs text-gray-500 font-bold">
-                  {tournamentName.length} / 20 caracteres
+                  {tournamentName.length} / 50 caracteres
                 </span>
               </div>
               <input 
                 type="text" 
-                maxLength={20}
+                maxLength={50}
                 value={tournamentName}
                 onChange={(e) => setTournamentName(e.target.value)}
                 placeholder="Ej. Cyber Clash 2024"
@@ -346,12 +346,12 @@ export const CreateTournamentWizard: React.FC<CreateTournamentWizardProps> = ({
                   <span className="text-black font-black">*</span>
                 </label>
                 <span className="text-xs text-gray-500 font-bold">
-                  {description.length} / 50 caracteres
+                  {description.length} / 80 caracteres
                 </span>
               </div>
               <input 
                 type="text" 
-                maxLength={50}
+                maxLength={80}
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="Ej. Torneo táctico de élite con gran final en vivo."

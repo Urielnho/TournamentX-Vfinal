@@ -159,8 +159,8 @@ export const OrganizerDashboardView: React.FC<OrganizerDashboardViewProps> = ({
     e.preventDefault();
     if (!currentTourn) return;
     setSettingsError('');
-    if (!tournTitle.trim() || tournTitle.trim().length > 20) return setSettingsError('El nombre debe tener entre 1 y 20 caracteres.');
-    if (!tournDescription.trim() || tournDescription.trim().length > 50) return setSettingsError('La descripción debe tener entre 1 y 50 caracteres.');
+    if (!tournTitle.trim() || tournTitle.trim().length > 50) return setSettingsError('El nombre debe tener entre 1 y 50 caracteres.');
+    if (!tournDescription.trim() || tournDescription.trim().length > 80) return setSettingsError('La descripción debe tener entre 1 y 80 caracteres.');
     if (tournBannerUrl.trim()) {
       try { const parsed = new URL(tournBannerUrl); if (parsed.protocol !== 'https:') throw new Error(); }
       catch { return setSettingsError('La imagen necesita una URL HTTPS válida.'); }
@@ -685,13 +685,13 @@ export const OrganizerDashboardView: React.FC<OrganizerDashboardViewProps> = ({
                   type="text"
                   value={tournTitle}
                   onChange={(e) => setTournTitle(e.target.value)}
-                  maxLength={20}
+                  maxLength={50}
                   className="w-full px-4 py-2.5 bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl text-black font-medium outline-none focus:border-black"
                 />
-                <p className="mt-1 text-[11px] text-gray-500">{tournTitle.length}/20 caracteres</p>
+                <p className="mt-1 text-[11px] text-gray-500">{tournTitle.length}/50 caracteres</p>
               </div>
 
-              <div><label className="font-bold text-black block mb-1">Descripción</label><textarea value={tournDescription} onChange={event => setTournDescription(event.target.value)} maxLength={50} rows={3} className="w-full resize-none rounded-2xl border border-[#E5E7EB] bg-[#F9FAFB] px-4 py-2.5 text-black outline-none focus:border-black" /><p className="mt-1 text-[11px] text-gray-500">{tournDescription.length}/50 caracteres</p></div>
+              <div><label className="font-bold text-black block mb-1">Descripción</label><textarea value={tournDescription} onChange={event => setTournDescription(event.target.value)} maxLength={80} rows={3} className="w-full resize-none rounded-2xl border border-[#E5E7EB] bg-[#F9FAFB] px-4 py-2.5 text-black outline-none focus:border-black" /><p className="mt-1 text-[11px] text-gray-500">{tournDescription.length}/80 caracteres</p></div>
 
               <div className="space-y-2 rounded-2xl border border-[#E5E7EB] p-4"><div><p className="font-bold text-black">Imagen del torneo</p><p className="text-[11px] text-gray-500">Sube JPG, PNG o WebP de máximo 5 MB, o pega una URL HTTPS.</p></div>{tournBannerUrl && <img src={tournBannerUrl} alt="Vista previa del torneo" className="h-40 w-full rounded-2xl object-cover" />}<input type="url" value={tournBannerUrl} onChange={event => setTournBannerUrl(event.target.value)} placeholder="https://..." className="w-full rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] p-3 outline-none focus:border-black" /><label className="inline-flex w-fit cursor-pointer rounded-full border border-black px-4 py-2 font-bold"><input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={event => void handleBannerFile(event.target.files?.[0])} />{isUploadingBanner ? 'Subiendo…' : 'Subir nueva imagen'}</label></div>
 
