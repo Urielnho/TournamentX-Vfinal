@@ -303,6 +303,16 @@ export async function loadAppData(userId?: string): Promise<AppDatabaseData> {
   return { tournaments, teams, participants, matches, transactions, pendingApprovals, users };
 }
 
+// Los inputs datetime-local entregan "2026-08-25T18:00", sin zona horaria. Postgres
+// interpreta ese texto como UTC al guardarlo en un timestamptz, así que la fecha
+// acababa adelantándose tantas horas como el huso local (7 en Hermosillo) y un
+// cierre de inscripciones puesto para hoy por la tarde nacía ya vencido.
+// new Date() sí parsea la cadena como hora local, así que toISOString da el instante real.
+function toInstant(localDateTime: string) {
+  const parsed = new Date(localDateTime);
+  return Number.isNaN(parsed.getTime()) ? localDateTime : parsed.toISOString();
+}
+
 export async function insertTournament(tournament: Tournament, organizerId: string): Promise<string> {
   if (!supabase) throw new Error('Supabase no está configurado.');
   if (tournament.status === 'draft') {
@@ -323,9 +333,9 @@ export async function insertTournament(tournament: Tournament, organizerId: stri
     access_type: tournament.accessType,
     location: tournament.location,
     stream: tournament.stream || null,
-    start_date: tournament.startDate,
-    end_date: tournament.endDate,
-    registration_deadline: tournament.registrationDeadline,
+    start_date: toInstant(tournament.startDate),
+    end_date: toInstant(tournament.endDate),
+    registration_deadline: toInstant(tournament.registrationDeadline),
     participant_type: tournament.participantType,
     min_players_per_team: tournament.minPlayersPerTeam,
     max_participants: tournament.maxParticipants,
