@@ -246,6 +246,26 @@ export async function insertTournament(tournament: Tournament, organizerId: stri
   return data.id;
 }
 
+export async function updateTournamentSettings(tournamentId: string, settings: {
+  title: string;
+  description: string;
+  bannerUrl: string;
+  stream?: Tournament['stream'];
+  organizerPercentage: number;
+  status: Tournament['status'];
+}) {
+  if (!supabase) throw new Error('Supabase no está configurado.');
+  const { error } = await supabase.from('tournaments').update({
+    title: settings.title.trim(),
+    description: settings.description.trim(),
+    banner_url: settings.bannerUrl.trim() || null,
+    stream: settings.stream || null,
+    organizer_percentage: settings.organizerPercentage,
+    status: settings.status,
+  }).eq('id', tournamentId).select('id').single();
+  if (error) throw error;
+}
+
 export async function createOrganizerPaymentIntent(tournamentId: string): Promise<string> {
   if (!supabase) throw new Error('Supabase no está configurado.');
   const { data, error } = await supabase.functions.invoke('create-organizer-payment-intent', { body: { tournamentId } });

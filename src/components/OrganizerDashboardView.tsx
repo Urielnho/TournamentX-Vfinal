@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Transaction, PendingApproval, ViewMode, Tournament, Match, Participant } from '../types';
 import { 
   DollarSign, 
@@ -25,6 +25,7 @@ import {
   RotateCcw
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
+import { uploadTournamentBanner } from '../services/supabaseData';
 
 interface OrganizerDashboardViewProps {
   transactions: Transaction[];
@@ -36,6 +37,7 @@ interface OrganizerDashboardViewProps {
   onApproveTeam: (id: string, teamName: string) => void;
   onRejectTeam: (id: string) => void;
   onUpdateMatchScore?: (matchId: string, scoreA: number, scoreB: number, winnerId?: string) => void;
+  onUpdateTournamentSettings: (tournamentId: string, settings: { title: string; description: string; bannerUrl: string; stream?: Tournament['stream']; organizerPercentage: number; status: Tournament['status'] }) => Promise<void>;
 }
 
 export const OrganizerDashboardView: React.FC<OrganizerDashboardViewProps> = ({
@@ -47,7 +49,8 @@ export const OrganizerDashboardView: React.FC<OrganizerDashboardViewProps> = ({
   onNavigate,
   onApproveTeam,
   onRejectTeam,
-  onUpdateMatchScore
+  onUpdateMatchScore,
+  onUpdateTournamentSettings,
 }) => {
   const [activeSidebarItem, setActiveSidebarItem] = useState<
     'resumen' | 'finanzas' | 'participantes' | 'partidos' | 'configuracion'
@@ -75,8 +78,31 @@ export const OrganizerDashboardView: React.FC<OrganizerDashboardViewProps> = ({
   // Tournament settings editable state
   const currentTourn = tournaments.find(t => t.id === selectedTournamentId) || tournaments[0];
   const [tournTitle, setTournTitle] = useState(currentTourn?.title || 'Torneo Principal');
+  const [tournDescription, setTournDescription] = useState(currentTourn?.description || '');
+  const [tournBannerUrl, setTournBannerUrl] = useState(currentTourn?.bannerUrl || '');
+  const [streamEnabled, setStreamEnabled] = useState(Boolean(currentTourn?.stream));
+  const [streamPlatform, setStreamPlatform] = useState<'twitch' | 'youtube'>(currentTourn?.stream?.platform || 'twitch');
+  const [streamChannel, setStreamChannel] = useState(currentTourn?.stream?.channelName || '');
+  const [streamUrl, setStreamUrl] = useState(currentTourn?.stream?.url || '');
+  const [isSavingSettings, setIsSavingSettings] = useState(false);
+  const [isUploadingBanner, setIsUploadingBanner] = useState(false);
+  const [settingsError, setSettingsError] = useState('');
   const [organizerFeePercent, setOrganizerFeePercent] = useState(currentTourn?.organizerPercentage ?? 15);
   const [tournStatus, setTournStatus] = useState<string>(currentTourn?.status || 'open');
+
+  useEffect(() => {
+    if (!currentTourn) return;
+    setTournTitle(currentTourn.title);
+    setTournDescription(currentTourn.description);
+    setTournBannerUrl(currentTourn.bannerUrl);
+    setOrganizerFeePercent(currentTourn.organizerPercentage);
+    setTournStatus(currentTourn.status);
+    setStreamEnabled(Boolean(currentTourn.stream));
+    setStreamPlatform(currentTourn.stream?.platform || 'twitch');
+    setStreamChannel(currentTourn.stream?.channelName || '');
+    setStreamUrl(currentTourn.stream?.url || '');
+    setSettingsError('');
+  }, [currentTourn?.id]);
 
   const filteredTransactions = useMemo(() => {
     return transactions.filter(tx => {
@@ -129,10 +155,37 @@ export const OrganizerDashboardView: React.FC<OrganizerDashboardViewProps> = ({
     setTimeout(() => setActionSuccessMessage(null), 3000);
   };
 
-  const handleSaveSettings = (e: React.FormEvent) => {
+  const handleSaveSettings = async (e: React.FormEvent) => {
     e.preventDefault();
-    setActionSuccessMessage('Configuración del torneo guardada.');
-    setTimeout(() => setActionSuccessMessage(null), 3000);
+    if (!currentTourn) return;
+    setSettingsError('');
+    if (!tournTitle.trim() || tournTitle.trim().length > 20) return setSettingsError('El nombre debe tener entre 1 y 20 caracteres.');
+    if (!tournDescription.trim() || tournDescription.trim().length > 50) return setSettingsError('La descripción debe tener entre 1 y 50 caracteres.');
+    if (tournBannerUrl.trim()) {
+      try { const parsed = new URL(tournBannerUrl); if (parsed.protocol !== 'https:') throw new Error(); }
+      catch { return setSettingsError('La imagen necesita una URL HTTPS válida.'); }
+    }
+    if (streamEnabled) {
+      try {
+        const parsed = new URL(streamUrl);
+        if (parsed.protocol !== 'https:') throw new Error();
+      } catch { return setSettingsError('La transmisión necesita una URL HTTPS válida.'); }
+    }
+    try {
+      setIsSavingSettings(true);
+      await onUpdateTournamentSettings(currentTourn.id, { title: tournTitle, description: tournDescription, bannerUrl: tournBannerUrl, stream: streamEnabled ? { platform: streamPlatform, url: streamUrl.trim(), channelName: streamChannel.trim() || undefined } : undefined, organizerPercentage: organizerFeePercent, status: tournStatus as Tournament['status'] });
+      setActionSuccessMessage('Configuración del torneo guardada.');
+      setTimeout(() => setActionSuccessMessage(null), 3000);
+    } catch (error) { setSettingsError(error instanceof Error ? error.message : 'No se pudo guardar la configuración.'); }
+    finally { setIsSavingSettings(false); }
+  };
+
+  const handleBannerFile = async (file?: File) => {
+    if (!file) return;
+    setSettingsError('');
+    try { setIsUploadingBanner(true); setTournBannerUrl(await uploadTournamentBanner(file)); }
+    catch (error) { setSettingsError(error instanceof Error ? error.message : 'No se pudo subir la imagen.'); }
+    finally { setIsUploadingBanner(false); }
   };
 
   const totalRevenue = (currentTourn?.financials?.registrationGross || 0) + (currentTourn?.financials?.sponsorGross || 0);
@@ -624,16 +677,25 @@ export const OrganizerDashboardView: React.FC<OrganizerDashboardViewProps> = ({
               <p className="text-xs text-gray-500">Parámetros generales, comisión del organizador y estado.</p>
             </div>
 
-            <div className="space-y-3 max-w-xl text-xs">
+            <div className="space-y-4 max-w-3xl text-xs">
+              {settingsError && <div role="alert" className="rounded-2xl border border-red-200 bg-red-50 p-3 font-semibold text-red-700">{settingsError}</div>}
               <div>
                 <label className="font-bold text-black block mb-1">Nombre del Torneo</label>
                 <input
                   type="text"
                   value={tournTitle}
                   onChange={(e) => setTournTitle(e.target.value)}
+                  maxLength={20}
                   className="w-full px-4 py-2.5 bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl text-black font-medium outline-none focus:border-black"
                 />
+                <p className="mt-1 text-[11px] text-gray-500">{tournTitle.length}/20 caracteres</p>
               </div>
+
+              <div><label className="font-bold text-black block mb-1">Descripción</label><textarea value={tournDescription} onChange={event => setTournDescription(event.target.value)} maxLength={50} rows={3} className="w-full resize-none rounded-2xl border border-[#E5E7EB] bg-[#F9FAFB] px-4 py-2.5 text-black outline-none focus:border-black" /><p className="mt-1 text-[11px] text-gray-500">{tournDescription.length}/50 caracteres</p></div>
+
+              <div className="space-y-2 rounded-2xl border border-[#E5E7EB] p-4"><div><p className="font-bold text-black">Imagen del torneo</p><p className="text-[11px] text-gray-500">Sube JPG, PNG o WebP de máximo 5 MB, o pega una URL HTTPS.</p></div>{tournBannerUrl && <img src={tournBannerUrl} alt="Vista previa del torneo" className="h-40 w-full rounded-2xl object-cover" />}<input type="url" value={tournBannerUrl} onChange={event => setTournBannerUrl(event.target.value)} placeholder="https://..." className="w-full rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] p-3 outline-none focus:border-black" /><label className="inline-flex w-fit cursor-pointer rounded-full border border-black px-4 py-2 font-bold"><input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={event => void handleBannerFile(event.target.files?.[0])} />{isUploadingBanner ? 'Subiendo…' : 'Subir nueva imagen'}</label></div>
+
+              <div className="space-y-3 rounded-2xl border border-[#E5E7EB] p-4"><label className="flex items-center justify-between gap-3"><span><b className="block">Transmisión oficial</b><span className="text-[11px] text-gray-500">Muestra Twitch o YouTube en el detalle del torneo.</span></span><input type="checkbox" checked={streamEnabled} onChange={event => setStreamEnabled(event.target.checked)} className="h-5 w-5 accent-black" /></label>{streamEnabled && <div className="grid gap-3 md:grid-cols-3"><select value={streamPlatform} onChange={event => setStreamPlatform(event.target.value as 'twitch' | 'youtube')} className="rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] p-3 font-bold"><option value="twitch">Twitch</option><option value="youtube">YouTube</option></select><input value={streamChannel} onChange={event => setStreamChannel(event.target.value)} placeholder="Canal / nombre" maxLength={80} className="rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] p-3 outline-none focus:border-black" /><input type="url" value={streamUrl} onChange={event => setStreamUrl(event.target.value)} placeholder={streamPlatform === 'twitch' ? 'https://twitch.tv/canal' : 'https://youtube.com/watch?v=...'} className="rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] p-3 outline-none focus:border-black" /></div>}</div>
 
               <div>
                 <label className="font-bold text-black block mb-1">Comisión del Organizador (%)</label>
@@ -664,9 +726,10 @@ export const OrganizerDashboardView: React.FC<OrganizerDashboardViewProps> = ({
 
               <button
                 type="submit"
-                className="mt-4 px-6 py-2.5 bg-black text-white rounded-full font-bold text-xs hover:bg-gray-800 cursor-pointer shadow-xs"
+                disabled={isSavingSettings || isUploadingBanner}
+                className="mt-4 px-6 py-2.5 bg-black text-white rounded-full font-bold text-xs hover:bg-gray-800 cursor-pointer shadow-xs disabled:cursor-not-allowed disabled:opacity-50"
               >
-                Guardar Ajustes
+                {isSavingSettings ? 'Guardando…' : 'Guardar Ajustes'}
               </button>
             </div>
           </form>

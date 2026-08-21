@@ -14,7 +14,7 @@ import { AdminDashboardView } from './components/AdminDashboardView';
 import { AuthModal } from './components/AuthModal';
 import { OrganizerFundingPayment } from './components/OrganizerFundingPayment';
 import { supabase } from './lib/supabase';
-import { createRegistrationPaymentIntent, insertRegistration, insertTeam, insertTournament, loadAppData, waitForRegistrationPayment } from './services/supabaseData';
+import { createRegistrationPaymentIntent, insertRegistration, insertTeam, insertTournament, loadAppData, updateTournamentSettings, waitForRegistrationPayment } from './services/supabaseData';
 
 const EMPTY_PROFILE: UserProfile = {
   id: '', name: 'Visitante', gamerTag: 'Visitante', globalRole: 'user', rank: 'Sin clasificación', level: 0,
@@ -183,6 +183,7 @@ export default function App() {
   const approveTeam = async (id: string) => { if (!supabase) return; await supabase.from('registrations').update({ status: 'confirmed' }).eq('id', id); await refreshData(authUser?.id); };
   const rejectTeam = async (id: string) => { if (!supabase) return; await supabase.from('registrations').update({ status: 'rejected' }).eq('id', id); await refreshData(authUser?.id); };
   const updateScore = async (matchId: string, scoreA: number, scoreB: number) => { if (!supabase) return; await supabase.from('matches').update({ score_a: scoreA, score_b: scoreB, status: scoreA > 0 || scoreB > 0 ? 'finished' : 'upcoming' }).eq('id', matchId); await refreshData(authUser?.id); };
+  const saveTournamentSettings = async (tournamentId: string, settings: Parameters<typeof updateTournamentSettings>[1]) => { await updateTournamentSettings(tournamentId, settings); await refreshData(authUser?.id); };
   const updateProfile = async (profile: UserProfile) => {
     if (supabase && authUser) {
       const { error } = await supabase.from('profiles').update({ full_name: profile.name, gamer_tag: profile.gamerTag, avatar_url: profile.avatarUrl || null }).eq('id', authUser.id);
@@ -220,7 +221,7 @@ export default function App() {
       {currentView === 'tournaments' && <ExploreTournamentsView tournaments={tournaments} onNavigate={handleNavigate} searchQuery={globalSearchQuery} onSearchQueryChange={setGlobalSearchQuery} />}
       {currentView === 'tournament-detail' && (currentTournament ? <TournamentDetailView tournament={currentTournament} matches={matches} participants={currentParticipants} onNavigate={handleNavigate} onRegister={handleRegister} /> : <EmptyState message="Este torneo no existe o ya no está disponible." onBack={() => handleNavigate('tournaments')} />)}
       {currentView === 'create-tournament' && authUser && <CreateTournamentWizard onTournamentCreated={handleTournamentCreated} onTournamentPublished={async tournamentId => { await refreshData(authUser.id); setSelectedTournamentId(tournamentId); }} onNavigate={handleNavigate} />}
-      {currentView === 'organizer-dashboard' && currentTournament?.isUserOrganizing && <OrganizerDashboardView transactions={transactions.filter(transaction => transaction.tournamentId === currentTournament.id)} pendingApprovals={pendingApprovals.filter(item => item.tournamentId === currentTournament.id)} tournaments={tournaments.filter(t => t.isUserOrganizing)} matches={matches.filter(match => match.tournamentId === currentTournament.id)} participants={currentParticipants} onNavigate={handleNavigate} onApproveTeam={id => void approveTeam(id)} onRejectTeam={id => void rejectTeam(id)} onUpdateMatchScore={(id, a, b) => void updateScore(id, a, b)} />}
+      {currentView === 'organizer-dashboard' && currentTournament?.isUserOrganizing && <OrganizerDashboardView transactions={transactions.filter(transaction => transaction.tournamentId === currentTournament.id)} pendingApprovals={pendingApprovals.filter(item => item.tournamentId === currentTournament.id)} tournaments={tournaments.filter(t => t.isUserOrganizing)} matches={matches.filter(match => match.tournamentId === currentTournament.id)} participants={currentParticipants} onNavigate={handleNavigate} onApproveTeam={id => void approveTeam(id)} onRejectTeam={id => void rejectTeam(id)} onUpdateMatchScore={(id, a, b) => void updateScore(id, a, b)} onUpdateTournamentSettings={saveTournamentSettings} />}
       {currentView === 'profile' && authUser && <ProfileAthleteView user={userProfile} onUpdateUser={profile => void updateProfile(profile)} onNavigate={handleNavigate} />}
       {currentView === 'teams' && <TeamsView participants={teamCards} tournaments={tournaments} onNavigate={handleNavigate} onCreateTeam={handleCreateTeam} />}
       {currentView === 'matches' && <MatchesView matches={matches} onNavigate={handleNavigate} />}
