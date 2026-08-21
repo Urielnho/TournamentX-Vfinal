@@ -1,53 +1,48 @@
 import React, { useState } from 'react';
-import { Participant, ViewMode } from '../types';
+import { Participant, Tournament, ViewMode } from '../types';
 import { Plus, X, Search, Users, Trophy, Shield, Check } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 interface TeamsViewProps {
   participants: Participant[];
+  tournaments: Tournament[];
   onNavigate: (view: ViewMode, tournamentId?: string) => void;
-  onCreateTeam: (newTeam: Participant) => void;
+  onCreateTeam: (tournamentId: string, name: string, tag: string) => Promise<void>;
 }
 
 export const TeamsView: React.FC<TeamsViewProps> = ({
   participants,
+  tournaments,
   onNavigate,
   onCreateTeam
 }) => {
   const [activeTab, setActiveTab] = useState<'mine' | 'managed' | 'invites' | 'history'>('mine');
-  const [invitationVisible, setInvitationVisible] = useState(true);
-  const [invitationMessage, setInvitationMessage] = useState('');
   const [search, setSearch] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [teamName, setTeamName] = useState('');
   const [teamTag, setTeamTag] = useState('');
   const [captainName, setCaptainName] = useState('Apex (Tú)');
+  const [selectedTournamentId, setSelectedTournamentId] = useState('');
+  const [createError, setCreateError] = useState('');
 
   const filteredTeams = participants.filter(t => 
     t.name.toLowerCase().includes(search.toLowerCase()) ||
     t.tag.toLowerCase().includes(search.toLowerCase())
   );
 
-  const handleCreate = (e: React.FormEvent) => {
+  const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!teamName.trim() || !teamTag.trim()) return;
-
-    const newTeam: Participant = {
-      id: `team-${Date.now()}`,
-      name: teamName,
-      tag: teamTag.toUpperCase(),
-      logo: '',
-      seed: participants.length + 1,
-      captain: captainName,
-      membersCount: 5,
-      status: 'confirmed'
-    };
-
-    onCreateTeam(newTeam);
-    setShowCreateModal(false);
-    setTeamName('');
-    setTeamTag('');
-    confetti({ particleCount: 50, spread: 50 });
+    if (!selectedTournamentId || !teamName.trim() || !teamTag.trim()) return;
+    setCreateError('');
+    try {
+      await onCreateTeam(selectedTournamentId, teamName.trim(), teamTag.toUpperCase());
+      setShowCreateModal(false);
+      setTeamName('');
+      setTeamTag('');
+      confetti({ particleCount: 50, spread: 50 });
+    } catch (error) {
+      setCreateError(error instanceof Error ? error.message : 'No se pudo crear el equipo.');
+    }
   };
 
   return (
@@ -78,7 +73,7 @@ export const TeamsView: React.FC<TeamsViewProps> = ({
       <div className="flex gap-2 overflow-x-auto border-b border-[#E5E7EB] pb-3">
         {[
           ['mine', 'Mis equipos'], ['managed', 'Equipos que administro'], ['invites', 'Invitaciones'], ['history', 'Historial']
-        ].map(([id, label]) => <button key={id} onClick={() => setActiveTab(id as typeof activeTab)} className={`shrink-0 rounded-full px-4 py-2 text-xs font-bold ${activeTab === id ? 'bg-black text-white' : 'border border-gray-200 bg-white text-gray-600'}`}>{label}{id === 'invites' && <span className="ml-2 rounded-full bg-black px-2 py-0.5 text-[10px] text-white">2</span>}</button>)}
+        ].map(([id, label]) => <button key={id} onClick={() => setActiveTab(id as typeof activeTab)} className={`shrink-0 rounded-full px-4 py-2 text-xs font-bold ${activeTab === id ? 'bg-black text-white' : 'border border-gray-200 bg-white text-gray-600'}`}>{label}{id === 'invites' && <span className="ml-2 rounded-full bg-black px-2 py-0.5 text-[10px] text-white">0</span>}</button>)}
       </div>
 
       {/* Search Bar */}
@@ -93,9 +88,9 @@ export const TeamsView: React.FC<TeamsViewProps> = ({
         />
       </div>
 
-      {activeTab === 'invites' && <div className="grid gap-3 sm:grid-cols-2">{invitationVisible ? <div className="rounded-2xl border border-[#E5E7EB] bg-white p-5"><p className="text-xs font-bold text-gray-500">ROCKET LEAGUE CHAMPIONSHIP</p><h3 className="mt-1 font-black">Rocket Kings</h3><p className="mt-2 text-xs text-gray-500">Invitación de NovaCaptain · 3/4 integrantes</p><div className="mt-4 flex gap-2"><button onClick={() => { setInvitationVisible(false); setInvitationMessage('Invitación aceptada. Ya formas parte de Rocket Kings.'); }} className="rounded-full bg-black px-4 py-2 text-xs font-bold text-white">Aceptar</button><button onClick={() => { setInvitationVisible(false); setInvitationMessage('Invitación rechazada.'); }} className="rounded-full border px-4 py-2 text-xs font-bold">Rechazar</button></div></div> : <div className="rounded-2xl border border-[#E5E7EB] bg-[#F9FAFB] p-6 text-center text-xs font-bold">{invitationMessage || 'No tienes invitaciones pendientes.'}</div>}</div>}
+      {activeTab === 'invites' && <div className="rounded-2xl border border-[#E5E7EB] bg-[#F9FAFB] p-6 text-center text-xs font-bold">No tienes invitaciones pendientes.</div>}
 
-      {activeTab === 'history' && <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{participants.slice(0, 2).map(team => <div key={`history-${team.id}`} className="rounded-3xl border border-[#E5E7EB] bg-white p-5"><div className="flex items-center justify-between"><strong>{team.name}</strong><span className="rounded-full bg-[#F3F4F6] px-2.5 py-1 text-[10px] font-bold">FINALIZADO</span></div><p className="mt-2 text-xs text-gray-500">Equipo temporal · roster cerrado</p><div className="mt-4 flex items-center justify-between border-t border-[#E5E7EB] pt-3 text-xs"><span>Participación registrada</span><Trophy className="w-4 h-4" /></div></div>)}</div>}
+      {activeTab === 'history' && <div className="rounded-2xl border border-[#E5E7EB] bg-[#F9FAFB] p-6 text-center text-xs font-bold">No hay equipos históricos registrados.</div>}
 
       {/* Teams Grid */}
       {activeTab !== 'invites' && activeTab !== 'history' &&
@@ -119,7 +114,7 @@ export const TeamsView: React.FC<TeamsViewProps> = ({
             <div className="flex justify-between items-center pt-3 border-t border-[#F3F4F6] text-xs">
               <span className="text-[11px] text-gray-500 flex items-center gap-1 font-medium">
                 <Users className="w-3.5 h-3.5" />
-                <span>{team.membersCount || 5} Atletas</span>
+                <span>{team.membersCount ?? 0} Atletas</span>
               </span>
 
               <span className="px-2.5 py-0.5 rounded-full bg-black text-white font-bold text-[10px]">
@@ -145,7 +140,8 @@ export const TeamsView: React.FC<TeamsViewProps> = ({
             <p className="text-xs text-gray-500 mb-4">Este equipo solo existirá dentro del torneo seleccionado.</p>
 
             <form onSubmit={handleCreate} className="space-y-4 text-xs">
-              <div><label className="font-bold text-gray-600 uppercase block mb-1">Torneo</label><select required className="w-full rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] px-3.5 py-2.5 outline-none"><option value="">Selecciona un torneo</option><option>Rocket League Championship</option><option>Marvel Rivals Cup</option></select></div>
+              <div><label className="font-bold text-gray-600 uppercase block mb-1">Torneo</label><select required value={selectedTournamentId} onChange={event => setSelectedTournamentId(event.target.value)} className="w-full rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] px-3.5 py-2.5 outline-none"><option value="">Selecciona un torneo</option>{tournaments.filter(tournament => tournament.status === 'open' || tournament.status === 'upcoming').map(tournament => <option key={tournament.id} value={tournament.id}>{tournament.title}</option>)}</select></div>
+              {createError && <p className="rounded-xl border border-red-200 bg-red-50 p-3 font-semibold text-red-700">{createError}</p>}
               <div>
                 <label className="font-bold text-gray-600 uppercase block mb-1">Nombre del Equipo</label>
                 <input 

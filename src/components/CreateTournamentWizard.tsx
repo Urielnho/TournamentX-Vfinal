@@ -5,7 +5,7 @@ import { Trophy, CheckCircle2, ArrowRight, ArrowLeft, Gamepad2, Layers, DollarSi
 import confetti from 'canvas-confetti';
 
 interface CreateTournamentWizardProps {
-  onTournamentCreated: (newTournament: Tournament) => void;
+  onTournamentCreated: (newTournament: Tournament) => Promise<Tournament>;
   onNavigate: (view: ViewMode, tournamentId?: string) => void;
 }
 
@@ -146,7 +146,7 @@ export const CreateTournamentWizard: React.FC<CreateTournamentWizardProps> = ({
     if (validateStep(currentStep)) setCurrentStep(prev => prev + 1);
   };
 
-  const handleFinish = () => {
+  const handleFinish = async () => {
     if (!validateStep(4)) return;
     const created: Tournament = {
       id: `tourn-${Date.now()}`,
@@ -177,7 +177,7 @@ export const CreateTournamentWizard: React.FC<CreateTournamentWizardProps> = ({
       registrationDeadline: registrationDeadline,
       participantType: participantType,
       minPlayersPerTeam: minPlayersPerTeam,
-      participantsCount: 1,
+      participantsCount: 0,
       maxParticipants: maxParticipants,
       entryFeeType: entryFeeType,
       entryFeeAmount: entryFeeType === 'free' ? 0 : entryFeeAmount,
@@ -193,21 +193,20 @@ export const CreateTournamentWizard: React.FC<CreateTournamentWizardProps> = ({
         { place: '2do Lugar', percentage: 25, estimatedAmount: Math.round(netPrizePool * 0.25), description: '25% de la bolsa neta' },
         { place: '3er Lugar', percentage: 15, estimatedAmount: Math.round(netPrizePool * 0.15), description: '15% de la bolsa neta' }
       ],
-      organizerId: 'usr-apex-01',
+      organizerId: '',
       organizer: {
-        name: 'Alex "Apex" Mercer (Organizador)',
-        verified: true
+        name: 'Organizador'
       },
       isUserOrganizing: true
     };
 
-    onTournamentCreated(created);
-    confetti({
-      particleCount: 80,
-      spread: 70,
-      origin: { y: 0.5 }
-    });
-    onNavigate('tournament-detail', created.id);
+    try {
+      const savedTournament = await onTournamentCreated(created);
+      confetti({ particleCount: 80, spread: 70, origin: { y: 0.5 } });
+      onNavigate('tournament-detail', savedTournament.id);
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : 'No se pudo publicar el torneo.');
+    }
   };
 
   return (

@@ -1,7 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import type { User as SupabaseUser } from '@supabase/supabase-js';
-import { ViewMode, Tournament, Participant, Transaction, PendingApproval, UserProfile, Team } from './types';
-import { INITIAL_TOURNAMENTS, INITIAL_USER_PROFILE, INITIAL_TRANSACTIONS, INITIAL_PENDING_APPROVALS, INITIAL_MATCHES, INITIAL_PARTICIPANTS, INITIAL_TEAMS } from './data/mockData';
+import { AdminUserSummary, Match, Participant, PendingApproval, Team, Tournament, Transaction, UserProfile, ViewMode } from './types';
 import { Navbar } from './components/Navbar';
 import { HomeView } from './components/HomeView';
 import { ExploreTournamentsView } from './components/ExploreTournamentsView';
@@ -14,22 +13,56 @@ import { MatchesView } from './components/MatchesView';
 import { AdminDashboardView } from './components/AdminDashboardView';
 import { AuthModal } from './components/AuthModal';
 import { supabase } from './lib/supabase';
+import { insertRegistration, insertTeam, insertTournament, loadAppData } from './services/supabaseData';
+
+const EMPTY_PROFILE: UserProfile = {
+  id: '', name: 'Visitante', gamerTag: 'Visitante', globalRole: 'user', rank: 'Sin clasificación', level: 0,
+  avatarUrl: '', bannerUrl: '', email: '', totalWon: 0, pendingAmount: 0, gameAccounts: {},
+  stats: { played: 0, won: 0, winRate: 0 }, recentMatches: [], financialHistory: [],
+};
 
 export default function App() {
   const [currentView, setCurrentView] = useState<ViewMode>('home');
-  const [selectedTournamentId, setSelectedTournamentId] = useState('neon-city-clash-2024');
-  const [tournaments, setTournaments] = useState<Tournament[]>(INITIAL_TOURNAMENTS);
-  const [userProfile, setUserProfile] = useState<UserProfile>(INITIAL_USER_PROFILE);
-  const [transactions, setTransactions] = useState<Transaction[]>(INITIAL_TRANSACTIONS);
-  const [pendingApprovals, setPendingApprovals] = useState<PendingApproval[]>(INITIAL_PENDING_APPROVALS);
-  const [matches, setMatches] = useState(INITIAL_MATCHES);
-  const [participants, setParticipants] = useState<Participant[]>(INITIAL_PARTICIPANTS);
-  const [teams, setTeams] = useState<Team[]>(INITIAL_TEAMS);
+  const [selectedTournamentId, setSelectedTournamentId] = useState('');
+  const [tournaments, setTournaments] = useState<Tournament[]>([]);
+  const [userProfile, setUserProfile] = useState<UserProfile>(EMPTY_PROFILE);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [pendingApprovals, setPendingApprovals] = useState<PendingApproval[]>([]);
+  const [matches, setMatches] = useState<Match[]>([]);
+  const [participants, setParticipants] = useState<Participant[]>([]);
+  const [teams, setTeams] = useState<Team[]>([]);
+  const [users, setUsers] = useState<AdminUserSummary[]>([]);
   const [authUser, setAuthUser] = useState<SupabaseUser | null>(null);
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const [loadingData, setLoadingData] = useState(true);
+  const [dataError, setDataError] = useState('');
+
+  const refreshData = useCallback(async (userId?: string) => {
+    setLoadingData(true);
+    setDataError('');
+    try {
+      const data = await loadAppData(userId);
+      setTournaments(data.tournaments);
+      setTeams(data.teams);
+      setParticipants(data.participants);
+      setMatches(data.matches);
+      setTransactions(data.transactions);
+      setPendingApprovals(data.pendingApprovals);
+      setUsers(data.users);
+      setSelectedTournamentId(previous => previous || data.tournaments[0]?.id || '');
+    } catch (error) {
+      setDataError(error instanceof Error ? error.message : 'No se pudieron cargar los datos de Supabase.');
+    } finally {
+      setLoadingData(false);
+    }
+  }, []);
 
   useEffect(() => {
-    if (!supabase) return;
+    if (!supabase) {
+      setLoadingData(false);
+      setDataError('Supabase no está configurado.');
+      return;
+    }
     supabase.auth.getSession().then(({ data }) => setAuthUser(data.session?.user ?? null));
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       setAuthUser(session?.user ?? null);
@@ -39,97 +72,98 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!authUser) return;
-    const metadata = authUser.user_metadata;
-    setUserProfile(previous => ({
-      ...previous,
-      id: authUser.id,
-      name: metadata.full_name || metadata.name || previous.name,
-      gamerTag: metadata.preferred_username || metadata.user_name || metadata.full_name || previous.gamerTag,
-      email: authUser.email || previous.email,
-      avatarUrl: metadata.avatar_url || metadata.picture || previous.avatarUrl,
-    }));
-
-    if (supabase) {
-      supabase
-        .from('profiles')
-        .select('full_name, gamer_tag, avatar_url, global_role')
-        .eq('id', authUser.id)
-        .single()
-        .then(({ data, error }) => {
-          if (error || !data) return;
-          setUserProfile(previous => ({
-            ...previous,
-            name: data.full_name || previous.name,
-            gamerTag: data.gamer_tag || previous.gamerTag,
-            avatarUrl: data.avatar_url || previous.avatarUrl,
-            globalRole: data.global_role === 'admin' ? 'admin' : 'user',
-          }));
-        });
+    void refreshData(authUser?.id);
+    if (!authUser) {
+      setUserProfile(EMPTY_PROFILE);
+      return;
     }
-  }, [authUser]);
+    const metadata = authUser.user_metadata;
+    setUserProfile(previous => ({ ...previous, id: authUser.id, name: metadata.full_name || metadata.name || 'Jugador', gamerTag: metadata.preferred_username || metadata.user_name || metadata.full_name || 'Jugador', email: authUser.email || '', avatarUrl: metadata.avatar_url || metadata.picture || '' }));
+    supabase?.from('profiles').select('full_name, gamer_tag, avatar_url, global_role').eq('id', authUser.id).single().then(({ data }) => {
+      if (!data) return;
+      setUserProfile(previous => ({ ...previous, name: data.full_name || previous.name, gamerTag: data.gamer_tag || previous.gamerTag, avatarUrl: data.avatar_url || previous.avatarUrl, globalRole: data.global_role === 'admin' ? 'admin' : 'user' }));
+    });
+  }, [authUser, refreshData]);
 
-  const handleSignOut = async () => {
-    await supabase?.auth.signOut();
-    setAuthUser(null);
-    setCurrentView('home');
-  };
-
+  const requireSession = () => { if (authUser) return true; setShowAuthModal(true); return false; };
+  const handleSignOut = async () => { await supabase?.auth.signOut(); setAuthUser(null); setCurrentView('home'); };
   const handleNavigate = (view: ViewMode, tournamentId?: string) => {
+    if (['create-tournament', 'organizer-dashboard', 'profile'].includes(view) && !requireSession()) return;
     if (tournamentId) setSelectedTournamentId(tournamentId);
     setCurrentView(view);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleTournamentCreated = (tournament: Tournament) => {
-    setTournaments(previous => [{ ...tournament, isUserOrganizing: true }, ...previous]);
-    setSelectedTournamentId(tournament.id);
+  const handleTournamentCreated = async (tournament: Tournament) => {
+    if (!authUser) throw new Error('Inicia sesión para publicar un torneo.');
+    const id = await insertTournament(tournament, authUser.id);
+    await refreshData(authUser.id);
+    setSelectedTournamentId(id);
+    return { ...tournament, id, organizerId: authUser.id, organizer: { name: userProfile.name, avatar: userProfile.avatarUrl }, isUserOrganizing: true };
   };
 
-  const handleRegister = (tournamentId: string, teamName: string, ign: string, type: 'team' | 'individual') => {
-    setTournaments(previous => previous.map(t => t.id === tournamentId ? { ...t, participantsCount: Math.min(t.maxParticipants, t.participantsCount + 1), isUserRegistered: true } : t));
-    setParticipants(previous => [{ id: `p-${Date.now()}`, name: teamName, tag: teamName.slice(0, 3).toUpperCase(), logo: '', captain: ign, membersCount: type === 'team' ? 5 : 1, status: 'confirmed' }, ...previous]);
+  const handleRegister = async (tournamentId: string, teamName: string, _ign: string, type: 'team' | 'individual') => {
+    if (!authUser) { setShowAuthModal(true); throw new Error('Inicia sesión para inscribirte.'); }
+    const teamId = type === 'team' ? await insertTeam(tournamentId, authUser.id, teamName, teamName.slice(0, 5).toUpperCase()) : undefined;
+    const tournament = tournaments.find(item => item.id === tournamentId);
+    await insertRegistration(tournamentId, authUser.id, teamId, tournament?.accessType === 'private' ? 'pending' : 'confirmed');
+    await refreshData(authUser.id);
   };
 
-  const approveTeam = (id: string, teamName: string) => {
-    setPendingApprovals(previous => previous.filter(item => item.id !== id));
-    setTransactions(previous => [{ id: `tx-${Date.now()}`, tournamentId: selectedTournamentId, tournamentTitle: 'TournamentX', userId: 'approved-user', userOrTeam: teamName, teamCode: teamName.slice(0, 3).toUpperCase(), feeType: 'entry_fee', transactionId: `#TXN-${Date.now().toString().slice(-4)}`, date: 'Ahora', amount: 500, currency: 'MXN', status: 'PAID', paymentMethod: 'Stripe' }, ...previous]);
+  const handleCreateTeam = async (tournamentId: string, name: string, tag: string) => {
+    if (!authUser) { setShowAuthModal(true); throw new Error('Inicia sesión para crear un equipo.'); }
+    await insertTeam(tournamentId, authUser.id, name, tag);
+    await refreshData(authUser.id);
   };
 
-  const updateScore = (matchId: string, scoreA: number, scoreB: number) => setMatches(previous => previous.map(match => match.id === matchId ? { ...match, teamA: { ...match.teamA, score: scoreA, isWinner: scoreA > scoreB }, teamB: { ...match.teamB, score: scoreB, isWinner: scoreB > scoreA }, status: scoreA >= 2 || scoreB >= 2 ? 'finished' as const : 'live' as const } : match));
+  const approveTeam = async (id: string) => { if (!supabase) return; await supabase.from('registrations').update({ status: 'confirmed' }).eq('id', id); await refreshData(authUser?.id); };
+  const rejectTeam = async (id: string) => { if (!supabase) return; await supabase.from('registrations').update({ status: 'rejected' }).eq('id', id); await refreshData(authUser?.id); };
+  const updateScore = async (matchId: string, scoreA: number, scoreB: number) => { if (!supabase) return; await supabase.from('matches').update({ score_a: scoreA, score_b: scoreB, status: scoreA > 0 || scoreB > 0 ? 'finished' : 'upcoming' }).eq('id', matchId); await refreshData(authUser?.id); };
+  const updateProfile = async (profile: UserProfile) => {
+    if (supabase && authUser) {
+      const { error } = await supabase.from('profiles').update({ full_name: profile.name, gamer_tag: profile.gamerTag, avatar_url: profile.avatarUrl || null }).eq('id', authUser.id);
+      if (error) throw error;
+    }
+    setUserProfile(profile);
+  };
 
   const deleteTournament = (id: string) => {
     const tournament = tournaments.find(item => item.id === id);
     if (!tournament) return { success: false, message: 'Torneo no encontrado.' };
     if (tournament.status === 'live') return { success: false, message: 'No se puede eliminar un torneo en curso.' };
-    setTournaments(previous => previous.filter(item => item.id !== id));
+    void supabase?.from('tournaments').delete().eq('id', id).then(() => refreshData(authUser?.id));
     return { success: true, message: `El torneo “${tournament.title}” fue eliminado.` };
   };
-
   const deleteTeam = (id: string) => {
     const team = teams.find(item => item.id === id);
     if (!team) return { success: false, message: 'Equipo no encontrado.' };
     if (tournaments.some(t => t.id === team.tournamentId && t.status === 'live')) return { success: false, message: 'No se puede eliminar un equipo que compite en un torneo activo.' };
-    setTeams(previous => previous.filter(item => item.id !== id));
+    void supabase?.from('teams').delete().eq('id', id).then(() => refreshData(authUser?.id));
     return { success: true, message: `El equipo “${team.name}” fue eliminado.` };
   };
 
-  const currentTournament = tournaments.find(t => t.id === selectedTournamentId) || tournaments[0];
+  const currentTournament = tournaments.find(tournament => tournament.id === selectedTournamentId);
+  const currentParticipants = participants.filter(participant => !participant.tournamentId || participant.tournamentId === selectedTournamentId);
+  const teamCards: Participant[] = teams.map(team => ({ id: team.id, tournamentId: team.tournamentId, name: team.name, tag: team.tag, logo: team.logo, captain: team.captainName, captainId: team.captainId, membersCount: team.members.length, status: team.status === 'confirmed' ? 'confirmed' : 'pending' }));
 
   return <div className="flex min-h-screen flex-col bg-white text-black selection:bg-black selection:text-white">
     <Navbar currentView={currentView} onNavigate={handleNavigate} user={userProfile} authUser={authUser} onSignIn={() => setShowAuthModal(true)} onSignOut={handleSignOut} />
     <main className="flex-1 bg-[#f5f6f8] text-black">
+      {dataError && <div className="mx-auto mt-4 max-w-4xl rounded-2xl border border-red-200 bg-red-50 px-5 py-3 text-sm font-semibold text-red-700">{dataError}</div>}
+      {loadingData && <div className="mx-auto max-w-4xl px-6 py-4 text-center text-xs font-bold text-gray-500">Cargando datos de TournamentX…</div>}
       {currentView === 'home' && <HomeView tournaments={tournaments} onNavigate={handleNavigate} />}
       {currentView === 'tournaments' && <ExploreTournamentsView tournaments={tournaments} onNavigate={handleNavigate} />}
-      {currentView === 'tournament-detail' && <TournamentDetailView tournament={currentTournament} matches={matches} participants={participants} onNavigate={handleNavigate} onRegister={handleRegister} />}
-      {currentView === 'create-tournament' && <CreateTournamentWizard onTournamentCreated={handleTournamentCreated} onNavigate={handleNavigate} />}
-      {currentView === 'organizer-dashboard' && currentTournament.isUserOrganizing && <OrganizerDashboardView transactions={transactions} pendingApprovals={pendingApprovals} tournaments={tournaments.filter(t => t.isUserOrganizing)} matches={matches} participants={participants} onNavigate={handleNavigate} onApproveTeam={approveTeam} onRejectTeam={id => setPendingApprovals(p => p.filter(item => item.id !== id))} onUpdateMatchScore={updateScore} />}
-      {currentView === 'profile' && <ProfileAthleteView user={userProfile} onUpdateUser={setUserProfile} onNavigate={handleNavigate} />}
-      {currentView === 'teams' && <TeamsView participants={participants} onNavigate={handleNavigate} onCreateTeam={team => setParticipants(previous => [team, ...previous])} />}
+      {currentView === 'tournament-detail' && (currentTournament ? <TournamentDetailView tournament={currentTournament} matches={matches} participants={currentParticipants} onNavigate={handleNavigate} onRegister={handleRegister} /> : <EmptyState message="Este torneo no existe o ya no está disponible." onBack={() => handleNavigate('tournaments')} />)}
+      {currentView === 'create-tournament' && authUser && <CreateTournamentWizard onTournamentCreated={handleTournamentCreated} onNavigate={handleNavigate} />}
+      {currentView === 'organizer-dashboard' && currentTournament?.isUserOrganizing && <OrganizerDashboardView transactions={transactions} pendingApprovals={pendingApprovals.filter(item => item.tournamentId === currentTournament.id)} tournaments={tournaments.filter(t => t.isUserOrganizing)} matches={matches.filter(match => match.tournamentId === currentTournament.id)} participants={currentParticipants} onNavigate={handleNavigate} onApproveTeam={id => void approveTeam(id)} onRejectTeam={id => void rejectTeam(id)} onUpdateMatchScore={(id, a, b) => void updateScore(id, a, b)} />}
+      {currentView === 'profile' && authUser && <ProfileAthleteView user={userProfile} onUpdateUser={profile => void updateProfile(profile)} onNavigate={handleNavigate} />}
+      {currentView === 'teams' && <TeamsView participants={teamCards} tournaments={tournaments} onNavigate={handleNavigate} onCreateTeam={handleCreateTeam} />}
       {currentView === 'matches' && <MatchesView matches={matches} onNavigate={handleNavigate} />}
-      {currentView === 'admin-panel' && userProfile.globalRole === 'admin' && <AdminDashboardView tournaments={tournaments} teams={teams} transactions={transactions} currentUser={userProfile} onNavigate={handleNavigate} onDeleteTournament={deleteTournament} onUpdateUserStatus={() => undefined} onDeleteUser={() => undefined} onDeleteTeam={deleteTeam} />}
+      {currentView === 'admin-panel' && userProfile.globalRole === 'admin' && <AdminDashboardView tournaments={tournaments} teams={teams} transactions={transactions} users={users} currentUser={userProfile} onNavigate={handleNavigate} onDeleteTournament={deleteTournament} onUpdateUserStatus={() => undefined} onDeleteUser={() => undefined} onDeleteTeam={deleteTeam} />}
     </main>
     <footer className="border-t border-white/10 bg-black px-6 py-8 text-xs text-gray-400"><div className="mx-auto flex max-w-[1280px] flex-col items-center justify-between gap-4 sm:flex-row"><b className="text-base text-white">TOURNAMENTX</b><span>Esports y deportes competitivos · © 2026</span><div className="flex gap-5"><button onClick={() => handleNavigate('tournaments')}>Torneos</button><button onClick={() => handleNavigate('matches')}>Partidos</button><button onClick={() => handleNavigate('profile')}>Mi cuenta</button></div></div></footer>
     {showAuthModal && <AuthModal onClose={() => setShowAuthModal(false)} />}
   </div>;
 }
+
+const EmptyState: React.FC<{ message: string; onBack: () => void }> = ({ message, onBack }) => <div className="mx-auto max-w-xl px-6 py-24 text-center"><h2 className="text-2xl font-black">Sin información disponible</h2><p className="mt-2 text-sm text-gray-500">{message}</p><button onClick={onBack} className="mt-6 rounded-full bg-black px-6 py-3 text-sm font-bold text-white">Volver a torneos</button></div>;

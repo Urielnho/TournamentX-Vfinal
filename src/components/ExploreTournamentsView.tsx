@@ -223,7 +223,7 @@ export const ExploreTournamentsView: React.FC<ExploreTournamentsViewProps> = ({
                   <div className="bg-[#F9FAFB] border border-[#E5E7EB] p-2.5 rounded-2xl">
                     <span className="text-[10px] uppercase font-bold text-gray-500 block">Premio</span>
                     <span className="text-sm font-black text-black">
-                      ${(t.basePrizePool || t.prizesBreakdown?.reduce((acc, p) => acc + (p.estimatedAmount || 0), 0) || 5000).toLocaleString()} MXN
+                      ${(t.basePrizePool || t.prizesBreakdown?.reduce((acc, p) => acc + (p.estimatedAmount || 0), 0) || 0).toLocaleString()} MXN
                     </span>
                   </div>
 

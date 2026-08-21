@@ -64,7 +64,7 @@ export const OrganizerDashboardView: React.FC<OrganizerDashboardViewProps> = ({
 
   // Selected tournament for management
   const [selectedTournamentId, setSelectedTournamentId] = useState<string>(
-    tournaments[0]?.id || 'neon-city-clash-2024'
+    tournaments[0]?.id || ''
   );
 
   // Match score edit state
@@ -289,13 +289,13 @@ export const OrganizerDashboardView: React.FC<OrganizerDashboardViewProps> = ({
 
               <div className="bg-white p-5 rounded-3xl border border-[#E5E7EB] shadow-xs">
                 <span className="text-[10px] text-gray-500 font-bold uppercase block">Equipos Registrados</span>
-                <p className="text-2xl font-black text-black mt-1">{participants.length + 8}</p>
+                <p className="text-2xl font-black text-black mt-1">{participants.length}</p>
                 <span className="text-[11px] text-gray-500 mt-1 block">{pendingApprovals.length} por autorizar</span>
               </div>
 
               <div className="bg-white p-5 rounded-3xl border border-[#E5E7EB] shadow-xs">
                 <span className="text-[10px] text-gray-500 font-bold uppercase block">Partidos Totales</span>
-                <p className="text-2xl font-black text-black mt-1">{matches.length || 6}</p>
+                <p className="text-2xl font-black text-black mt-1">{matches.length}</p>
                 <span className="text-[11px] text-gray-500 mt-1 block">Brackets sincronizados</span>
               </div>
             </div>

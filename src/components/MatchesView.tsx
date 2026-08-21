@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Match, ViewMode } from '../types';
 import { ChevronRight, X, Edit2, Check } from 'lucide-react';
 
@@ -18,6 +18,8 @@ export const MatchesView: React.FC<MatchesViewProps> = ({ matches, onNavigate })
   const [editScoreA, setEditScoreA] = useState(0);
   const [editScoreB, setEditScoreB] = useState(0);
   const [savedMessage, setSavedMessage] = useState('');
+
+  useEffect(() => setLocalMatches(matches), [matches]);
 
   const filteredMatches = localMatches.filter(m => {
     if (filterGame !== 'ALL' && m.game !== filterGame) return false;

@@ -8,7 +8,7 @@ interface TournamentDetailViewProps {
   matches: Match[];
   participants: Participant[];
   onNavigate: (view: ViewMode, tournamentId?: string) => void;
-  onRegister: (tournamentId: string, teamName: string, ign: string, type: 'team' | 'individual') => void;
+  onRegister: (tournamentId: string, teamName: string, ign: string, type: 'team' | 'individual') => Promise<void>;
 }
 
 export const TournamentDetailView: React.FC<TournamentDetailViewProps> = ({
@@ -27,24 +27,22 @@ export const TournamentDetailView: React.FC<TournamentDetailViewProps> = ({
   const [regTeamName, setRegTeamName] = useState('');
   const [regPlayerIgn, setRegPlayerIgn] = useState('');
   const [registrationSuccess, setRegistrationSuccess] = useState(false);
+  const [registrationError, setRegistrationError] = useState('');
 
-  const handleConfirmRegistration = (e: React.FormEvent) => {
+  const handleConfirmRegistration = async (e: React.FormEvent) => {
     e.preventDefault();
     if (regType === 'team' && !regTeamName.trim()) return;
     if (!regPlayerIgn.trim()) return;
 
-    onRegister(tournament.id, regTeamName || `${regPlayerIgn} Squad`, regPlayerIgn, regType);
-    setRegistrationSuccess(true);
-    confetti({
-      particleCount: 50,
-      spread: 50,
-      origin: { y: 0.6 }
-    });
-
-    setTimeout(() => {
-      setShowRegisterModal(false);
-      setRegistrationSuccess(false);
-    }, 1500);
+    setRegistrationError('');
+    try {
+      await onRegister(tournament.id, regTeamName || `${regPlayerIgn} Squad`, regPlayerIgn, regType);
+      setRegistrationSuccess(true);
+      confetti({ particleCount: 50, spread: 50, origin: { y: 0.6 } });
+      setTimeout(() => { setShowRegisterModal(false); setRegistrationSuccess(false); }, 1500);
+    } catch (error) {
+      setRegistrationError(error instanceof Error ? error.message : 'No se pudo completar la inscripción.');
+    }
   };
 
   const handleShare = () => {
@@ -55,7 +53,7 @@ export const TournamentDetailView: React.FC<TournamentDetailViewProps> = ({
     }
   };
 
-  const tournamentMatches = matches.filter(m => m.tournamentId === tournament.id || m.tournamentId === 'neon-city-clash-2024');
+  const tournamentMatches = matches.filter(m => m.tournamentId === tournament.id);
   const totalPrizePool = tournament.basePrizePool + tournament.sponsors.reduce((total, sponsor) => total + sponsor.contribution, 0);
 
   const detailTabs = [
@@ -252,63 +250,7 @@ export const TournamentDetailView: React.FC<TournamentDetailViewProps> = ({
         {/* Tab 2: BRACKET */}
         {activeTab === 'bracket' && (
           <div className="bg-white rounded-3xl border border-[#E5E7EB] p-6 overflow-x-auto shadow-xs">
-            <div className="min-w-[760px] grid grid-cols-3 gap-6">
-              {/* Cuartos */}
-              <div className="space-y-4">
-                <div className="text-center font-bold text-xs text-black pb-2 border-b border-[#E5E7EB]">
-                  Cuartos de Final (Bo3)
-                </div>
-                {tournamentMatches.slice(0, 2).map((m) => (
-                  <div key={m.id} className="bg-[#F9FAFB] rounded-2xl p-3 border border-[#E5E7EB] space-y-2 text-xs">
-                    <div className="flex justify-between items-center font-bold text-black">
-                      <span>{m.teamA.name}</span>
-                      <span className="font-black">{m.teamA.score}</span>
-                    </div>
-                    <div className="flex justify-between items-center text-gray-500">
-                      <span>{m.teamB.name}</span>
-                      <span>{m.teamB.score}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Semifinales */}
-              <div className="space-y-4">
-                <div className="text-center font-bold text-xs text-black pb-2 border-b border-[#E5E7EB]">
-                  Semifinales (Bo3)
-                </div>
-                <div className="bg-[#F9FAFB] rounded-2xl p-3 border border-[#E5E7EB] space-y-2 text-xs">
-                  <div className="flex justify-between items-center font-bold text-black">
-                    <span>Cloud9 Apex</span>
-                    <span className="font-black">2</span>
-                  </div>
-                  <div className="flex justify-between items-center text-gray-500">
-                    <span>Sentinels Latam</span>
-                    <span>1</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Gran Final */}
-              <div className="space-y-4">
-                <div className="text-center font-bold text-xs text-black pb-2 border-b border-[#E5E7EB]">
-                  Gran Final (Bo5)
-                </div>
-                <div className="bg-black text-white rounded-2xl p-4 border border-gray-800 space-y-3 text-xs shadow-xs">
-                  <div className="flex justify-between items-center font-bold text-white">
-                    <span>Cloud9 Apex</span>
-                    <span className="text-sm font-black">3</span>
-                  </div>
-                  <div className="flex justify-between items-center text-gray-400">
-                    <span>Sentinels Latam</span>
-                    <span className="text-sm">2</span>
-                  </div>
-                  <div className="pt-2 border-t border-gray-800 text-[10px] text-gray-300 text-center font-bold">
-                    ¡Cloud9 Campeón! ($6,000 USD)
-                  </div>
-                </div>
-              </div>
-            </div>
+            {tournamentMatches.length === 0 ? <div className="py-12 text-center text-xs text-gray-500">El organizador todavía no ha generado partidos para este torneo.</div> : <div className="min-w-[680px] grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">{tournamentMatches.map(match => <div key={match.id} className="space-y-3 rounded-2xl border border-[#E5E7EB] bg-[#F9FAFB] p-4 text-xs"><p className="border-b border-[#E5E7EB] pb-2 text-center font-bold">{match.roundName}</p><div className="flex justify-between"><span>{match.teamA.name}</span><b>{match.teamA.score ?? 0}</b></div><div className="flex justify-between text-gray-500"><span>{match.teamB.name}</span><b>{match.teamB.score ?? 0}</b></div></div>)}</div>}
           </div>
         )}
 
@@ -344,7 +286,7 @@ export const TournamentDetailView: React.FC<TournamentDetailViewProps> = ({
                 </div>
                 <div className="overflow-hidden">
                   <h4 className="text-xs font-bold text-black truncate">{p.name}</h4>
-                  <p className="text-[10px] text-gray-500 truncate">Capitán: {p.captain || 'Asignado'} • {p.membersCount || 5} Jugadores</p>
+                  <p className="text-[10px] text-gray-500 truncate">Capitán: {p.captain || 'Sin asignar'} • {p.membersCount ?? 0} jugadores</p>
                 </div>
               </div>
             ))}
@@ -413,6 +355,7 @@ export const TournamentDetailView: React.FC<TournamentDetailViewProps> = ({
               </div>
             ) : (
               <form onSubmit={handleConfirmRegistration} className="space-y-4">
+                {registrationError && <p className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs font-semibold text-red-700">{registrationError}</p>}
                 <div>
                   <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Tipo de Registro</label>
                   <div className="flex gap-2">

@@ -1,5 +1,5 @@
-import React, { useState, useMemo } from 'react';
-import { Tournament, UserProfile, Team, Transaction, AdminDisputeTicket, ViewMode } from '../types';
+import React, { useEffect, useState, useMemo } from 'react';
+import { AdminUserSummary, Tournament, UserProfile, Team, Transaction, AdminDisputeTicket, ViewMode } from '../types';
 import { 
   Shield, 
   Users, 
@@ -25,6 +25,7 @@ interface AdminDashboardViewProps {
   tournaments: Tournament[];
   teams: Team[];
   transactions: Transaction[];
+  users: AdminUserSummary[];
   currentUser: UserProfile;
   onNavigate: (view: ViewMode, tournamentId?: string) => void;
   onDeleteTournament: (tournamentId: string) => { success: boolean; message: string };
@@ -37,6 +38,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
   tournaments,
   teams,
   transactions,
+  users,
   currentUser,
   onNavigate,
   onDeleteTournament,
@@ -49,20 +51,11 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'open' | 'live' | 'completed'>('ALL');
   const [actionFeedback, setActionFeedback] = useState<string | null>(null);
 
-  // Mock initial users for admin view
-  const [userList, setUserList] = useState<Array<{ id: string; name: string; email: string; role: string; status: 'active' | 'suspended' }>>([
-    { id: 'usr-1', name: 'Apex Warrior', email: 'apex@tournamentx.gg', role: 'Athlete', status: 'active' },
-    { id: 'usr-2', name: 'League Master', email: 'org@lcs.gg', role: 'Organizer', status: 'active' },
-    { id: 'usr-3', name: 'ToxicPlayer99', email: 'banned@cheater.gg', role: 'Athlete', status: 'suspended' },
-    { id: 'usr-4', name: 'Valkyrie Main', email: 'valk@tournamentx.gg', role: 'Athlete', status: 'active' },
-    { id: 'usr-5', name: 'CyberOrganizers SL', email: 'contact@cyberclash.es', role: 'Organizer', status: 'active' }
-  ]);
+  const [userList, setUserList] = useState<AdminUserSummary[]>(users);
 
-  // Mock disputes
-  const [disputes, setDisputes] = useState<Array<{ id: string; tournament: string; reason: string; reportedBy: string; status: 'pending' | 'resolved' }>>([
-    { id: 'disp-1', tournament: 'Apex Championship 2024', reason: 'Disputa de captura de pantalla por uso de ping alto no reportado.', reportedBy: 'Cloud9 Apex', status: 'pending' },
-    { id: 'disp-2', tournament: 'Valorant Champions Cup', reason: 'Equipo rival no se presentó a tiempo tras 15 minutos.', reportedBy: 'Sentinels Jr', status: 'pending' }
-  ]);
+  const [disputes, setDisputes] = useState<Array<{ id: string; tournament: string; reason: string; reportedBy: string; status: 'pending' | 'resolved' }>>([]);
+
+  useEffect(() => setUserList(users), [users]);
 
   const showNotification = (msg: string) => {
     setActionFeedback(msg);
@@ -169,7 +162,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
 
         <div className="bg-white p-5 rounded-3xl border border-[#E5E7EB] shadow-xs">
           <span className="text-[10px] text-gray-500 font-bold uppercase">Equipos Registrados</span>
-          <p className="text-2xl font-black text-black mt-1">{teams.length + 12}</p>
+          <p className="text-2xl font-black text-black mt-1">{teams.length}</p>
           <span className="text-[11px] text-gray-500 mt-0.5 block">Escuadras activas</span>
         </div>
 

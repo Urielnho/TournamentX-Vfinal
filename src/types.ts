@@ -1,5 +1,13 @@
 export type GlobalRole = 'admin' | 'user';
 
+export interface AdminUserSummary {
+  id: string;
+  name: string;
+  email: string;
+  role: GlobalRole;
+  status: 'active' | 'suspended';
+}
+
 export type ViewMode = 
   | 'home' 
   | 'tournaments' 
@@ -87,6 +95,7 @@ export interface Team {
 
 export interface Participant {
   id: string;
+  tournamentId?: string;
   name: string;
   tag: string;
   logo: string;
