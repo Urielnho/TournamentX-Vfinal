@@ -129,6 +129,7 @@ export const GAMES_CATALOG = [
   {
     id: 'lol',
     name: 'League of Legends',
+    formatLabel: 'En equipos (5v5)',
     category: 'esports',
     minPlayers: 5,
     supportsCustomRoster: true,
@@ -144,6 +145,7 @@ export const GAMES_CATALOG = [
   {
     id: 'fortnite',
     name: 'Fortnite',
+    formatLabel: '1 vs 1, Dúos o en equipos',
     category: 'esports',
     minPlayers: 1,
     supportsCustomRoster: true,
@@ -158,6 +160,7 @@ export const GAMES_CATALOG = [
   {
     id: 'marvelrivals',
     name: 'Marvel Rivals',
+    formatLabel: 'En equipos (6v6)',
     category: 'esports',
     minPlayers: 6,
     supportsCustomRoster: true,
@@ -172,11 +175,12 @@ export const GAMES_CATALOG = [
   {
     id: 'rocketleague',
     name: 'Rocket League',
+    formatLabel: '1v1, 2v2, 3v3 o 4v4',
     category: 'esports',
     minPlayers: 3,
     supportsCustomRoster: true,
     imageUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDzK9bnQxtdRDxWr1OgKqGs1xZeXwSk9OkTLhs-aVhESAhsjnU6-eGOKPDgFpg5ST2LCfWZtbFsYsjFpSLyjUhO46PzT6XLUF5m44kA20CECz6J-XRlrQTWzkUM2tVgH4nq88vFo6HpniL6gnKq7iUmr0zQvrhJaowzzwoWQVglOcR9Gpga2y3wCT2gXf-9PFI5On5tpKefVHr-2ZijRuvy1N05nHmmzudS7-0kB7QuJoAf_Hb0XIqI',
-    modes: ["3 jugadores mínimo", "2v2 Doubles (Configuración Personalizada)", "1v1 Duel"],
+    modes: ["3v3 Estándar", "4v4 Chaos", "2v2 Doubles (Configuración Personalizada)", "1v1 Duel"],
     defaultRules: [
       "Estadios estándar de competición (DFH Stadium / Champions Field).",
       "Partidos estándar de 5 minutos con Overtime ilimitado.",
@@ -186,6 +190,7 @@ export const GAMES_CATALOG = [
   {
     id: 'dota2',
     name: 'Dota 2',
+    formatLabel: 'En equipos (5v5)',
     category: 'esports',
     minPlayers: 5,
     supportsCustomRoster: true,
@@ -200,6 +205,7 @@ export const GAMES_CATALOG = [
   {
     id: 'mortalkombat',
     name: 'Mortal Kombat 1',
+    formatLabel: '1 vs 1',
     category: 'esports',
     minPlayers: 1,
     supportsCustomRoster: false,
@@ -214,6 +220,7 @@ export const GAMES_CATALOG = [
   {
     id: 'smashbros',
     name: 'Super Smash Bros. Ultimate',
+    formatLabel: '1 vs 1',
     category: 'esports',
     minPlayers: 1,
     supportsCustomRoster: false,
@@ -230,6 +237,7 @@ export const GAMES_CATALOG = [
   {
     id: 'soccer',
     name: 'Fútbol',
+    formatLabel: 'En equipos (6v6 u 11v11)',
     category: 'sports',
     minPlayers: 6,
     supportsCustomRoster: true,
@@ -245,6 +253,7 @@ export const GAMES_CATALOG = [
   {
     id: 'basketball',
     name: 'Básquetbol',
+    formatLabel: 'En equipos (3v3 o 5v5)',
     category: 'sports',
     minPlayers: 3,
     supportsCustomRoster: true,
@@ -259,6 +268,7 @@ export const GAMES_CATALOG = [
   {
     id: 'tennis',
     name: 'Tenis',
+    formatLabel: '1 vs 1 o Dúos',
     category: 'sports',
     minPlayers: 1,
     supportsCustomRoster: false,
@@ -273,6 +283,7 @@ export const GAMES_CATALOG = [
   {
     id: 'pingpong',
     name: 'Ping Pong (Tenis de Mesa)',
+    formatLabel: '1 vs 1',
     category: 'sports',
     minPlayers: 1,
     supportsCustomRoster: false,

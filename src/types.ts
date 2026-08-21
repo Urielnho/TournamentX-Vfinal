@@ -21,7 +21,7 @@ export type ViewMode =
 
 export type TournamentCategory = 'esports' | 'sports';
 
-export type TournamentStatus = 'upcoming' | 'open' | 'live' | 'completed' | 'cancelled' | 'suspended';
+export type TournamentStatus = 'draft' | 'upcoming' | 'open' | 'live' | 'completed' | 'cancelled' | 'suspended';
 
 export type TournamentFormat = 
   | 'single_elim' 
@@ -206,6 +206,16 @@ export interface Tournament {
   
   prizeType: PrizeType;
   basePrizePool: number; // Premios base aportados por organizador si aplica
+  financials?: {
+    registrationGross: number;
+    sponsorGross: number;
+    stripeFees: number;
+    refunds: number;
+    distributableNet: number;
+    organizerAmount: number;
+    prizeAmount: number;
+    currency: string;
+  };
   otherPrizeDescription?: string;
   
   // Patrocinadores

@@ -8,7 +8,7 @@ interface TournamentDetailViewProps {
   matches: Match[];
   participants: Participant[];
   onNavigate: (view: ViewMode, tournamentId?: string) => void;
-  onRegister: (tournamentId: string, teamName: string, ign: string, type: 'team' | 'individual') => Promise<void>;
+  onRegister: (tournamentId: string, teamName: string, ign: string, type: 'team' | 'individual') => Promise<'payment_pending' | 'confirmed'>;
 }
 
 export const TournamentDetailView: React.FC<TournamentDetailViewProps> = ({
@@ -36,7 +36,8 @@ export const TournamentDetailView: React.FC<TournamentDetailViewProps> = ({
 
     setRegistrationError('');
     try {
-      await onRegister(tournament.id, regTeamName || `${regPlayerIgn} Squad`, regPlayerIgn, regType);
+      const result = await onRegister(tournament.id, regTeamName || `${regPlayerIgn} Squad`, regPlayerIgn, regType);
+      if (result === 'payment_pending') { setShowRegisterModal(false); return; }
       setRegistrationSuccess(true);
       confetti({ particleCount: 50, spread: 50, origin: { y: 0.6 } });
       setTimeout(() => { setShowRegisterModal(false); setRegistrationSuccess(false); }, 1500);

@@ -135,8 +135,8 @@ export const OrganizerDashboardView: React.FC<OrganizerDashboardViewProps> = ({
     setTimeout(() => setActionSuccessMessage(null), 3000);
   };
 
-  const totalRevenue = transactions.reduce((acc, t) => acc + (t.status === 'PAID' ? t.amount : 0), 0);
-  const organizerCommission = Math.round((totalRevenue * organizerFeePercent) / 100);
+  const totalRevenue = (currentTourn?.financials?.registrationGross || 0) + (currentTourn?.financials?.sponsorGross || 0);
+  const organizerCommission = currentTourn?.financials?.organizerAmount || 0;
 
   return (
     <div className="w-full max-w-[1440px] mx-auto px-4 md:px-8 py-8 flex flex-col md:flex-row gap-6 font-['Golos_Text',sans-serif] text-black">
@@ -277,14 +277,14 @@ export const OrganizerDashboardView: React.FC<OrganizerDashboardViewProps> = ({
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
               <div className="bg-white p-5 rounded-3xl border border-[#E5E7EB] shadow-xs">
                 <span className="text-[10px] text-gray-500 font-bold uppercase block">Recaudación Total</span>
-                <p className="text-2xl font-black text-black mt-1">${totalRevenue.toLocaleString()} USD</p>
-                <span className="text-[11px] text-gray-500 mt-1 block">Inscripciones confirmadas</span>
+                <p className="text-2xl font-black text-black mt-1">${totalRevenue.toLocaleString()} MXN</p>
+                <span className="text-[11px] text-gray-500 mt-1 block">Cobros confirmados por Stripe</span>
               </div>
 
               <div className="bg-white p-5 rounded-3xl border border-[#E5E7EB] shadow-xs">
                 <span className="text-[10px] text-gray-500 font-bold uppercase block">Margen Organizador</span>
-                <p className="text-2xl font-black text-black mt-1">${organizerCommission.toLocaleString()} USD</p>
-                <span className="text-[11px] text-gray-500 mt-1 block">{organizerFeePercent}% de comisión</span>
+                <p className="text-2xl font-black text-black mt-1">${organizerCommission.toLocaleString()} MXN</p>
+                <span className="text-[11px] text-gray-500 mt-1 block">{organizerFeePercent}% del neto distribuible</span>
               </div>
 
               <div className="bg-white p-5 rounded-3xl border border-[#E5E7EB] shadow-xs">

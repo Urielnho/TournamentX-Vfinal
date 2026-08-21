@@ -3,6 +3,8 @@ import { Tournament, TournamentCategory, TournamentFormat, ViewMode, AccessType,
 import { GAMES_CATALOG } from '../data/mockData';
 import { Trophy, CheckCircle2, ArrowRight, ArrowLeft, Gamepad2, Layers, DollarSign, Calendar, Sparkles, Shield, Upload, Globe, MapPin, Tv, Plus, Trash2, AlertCircle, Info, Lock } from 'lucide-react';
 import confetti from 'canvas-confetti';
+import { OrganizerFundingPayment } from './OrganizerFundingPayment';
+import { createOrganizerPaymentIntent, uploadTournamentBanner, waitForOrganizerFunding } from '../services/supabaseData';
 
 interface CreateTournamentWizardProps {
   onTournamentCreated: (newTournament: Tournament) => Promise<Tournament>;
@@ -16,9 +18,10 @@ export const CreateTournamentWizard: React.FC<CreateTournamentWizardProps> = ({
   const [currentStep, setCurrentStep] = useState(1);
 
   // Step 1: Información General
-  const [tournamentName, setTournamentName] = useState('Cyber Clash 2024');
-  const [description, setDescription] = useState('Torneo táctico de élite con gran final en vivo.');
+  const [tournamentName, setTournamentName] = useState('');
+  const [description, setDescription] = useState('');
   const [bannerUrl, setBannerUrl] = useState('');
+  const [isUploadingBanner, setIsUploadingBanner] = useState(false);
   const [hasStream, setHasStream] = useState(true);
   const [streamPlatform, setStreamPlatform] = useState<'twitch' | 'youtube'>('twitch');
   const [streamUrl, setStreamUrl] = useState('https://twitch.tv/tournamentx_live');
@@ -61,12 +64,14 @@ export const CreateTournamentWizard: React.FC<CreateTournamentWizardProps> = ({
   const [organizerPercentage, setOrganizerPercentage] = useState(15);
   const [prizeType, setPrizeType] = useState<PrizeType>('monetary');
   const [basePrizePool, setBasePrizePool] = useState(5000);
+  const [prizePercentages, setPrizePercentages] = useState<number[]>([100]);
+  const [fundingClientSecret, setFundingClientSecret] = useState('');
+  const [draftTournamentId, setDraftTournamentId] = useState('');
+  const [isPublishing, setIsPublishing] = useState(false);
   const [otherPrizeDesc, setOtherPrizeDesc] = useState('Trofeo de Campeón + Medallas');
   
   // Patrocinadores
-  const [sponsors, setSponsors] = useState<Sponsor[]>([
-    { id: 'sp-init', name: 'Razer Gaming', logo: 'RAZER', contribution: 8000, link: 'https://razer.com' }
-  ]);
+  const [sponsors, setSponsors] = useState<Sponsor[]>([]);
   const [sponsorName, setSponsorName] = useState('');
   const [sponsorContribution, setSponsorContribution] = useState(5000);
   const [sponsorLink, setSponsorLink] = useState('https://');
@@ -123,6 +128,7 @@ export const CreateTournamentWizard: React.FC<CreateTournamentWizardProps> = ({
   const grossPrizePool = (prizeType === 'monetary' ? basePrizePool : 0) + estimatedEntryFees + totalSponsorContributions;
   const organizerCut = Math.round((grossPrizePool * organizerPercentage) / 100);
   const netPrizePool = Math.max(0, grossPrizePool - organizerCut);
+  const prizePercentageTotal = prizePercentages.reduce((sum, value) => sum + value, 0);
 
   const validateStep = (step: number) => {
     let error = '';
@@ -137,6 +143,7 @@ export const CreateTournamentWizard: React.FC<CreateTournamentWizardProps> = ({
     else if (step === 3 && rules.length === 0) error = 'Agrega al menos una regla.';
     else if (step === 4 && entryFeeType !== 'free' && entryFeeAmount <= 0) error = 'La inscripción de pago debe tener un importe mayor a cero.';
     else if (step === 4 && prizeType === 'monetary' && (basePrizePool < 1 || basePrizePool > 10000000)) error = 'El premio monetario debe estar entre $1 y $10,000,000 MXN.';
+    else if (step === 4 && prizeType === 'monetary' && prizePercentageTotal !== 100) error = 'Los porcentajes de los lugares premiados deben sumar exactamente 100%.';
     else if (step === 4 && prizeType === 'other' && !otherPrizeDesc.trim()) error = 'Describe el premio no monetario.';
     setFormError(error);
     return !error;
@@ -156,7 +163,7 @@ export const CreateTournamentWizard: React.FC<CreateTournamentWizardProps> = ({
       gameMode: gameMode,
       category: category,
       format: format,
-      status: 'open',
+      status: prizeType === 'monetary' && basePrizePool > 0 ? 'draft' : 'open',
       accessType: accessType,
       bannerUrl: bannerUrl.trim() || selectedGame.imageUrl,
       location: {
@@ -188,11 +195,10 @@ export const CreateTournamentWizard: React.FC<CreateTournamentWizardProps> = ({
       otherPrizeDescription: prizeType === 'other' ? otherPrizeDesc : undefined,
       sponsors: sponsors,
       rules: rules,
-      prizesBreakdown: [
-        { place: '1er Lugar', percentage: 60, estimatedAmount: Math.round(netPrizePool * 0.60), description: '60% de la bolsa neta' },
-        { place: '2do Lugar', percentage: 25, estimatedAmount: Math.round(netPrizePool * 0.25), description: '25% de la bolsa neta' },
-        { place: '3er Lugar', percentage: 15, estimatedAmount: Math.round(netPrizePool * 0.15), description: '15% de la bolsa neta' }
-      ],
+      prizesBreakdown: prizeType === 'monetary' ? prizePercentages.map((percentage, index) => ({
+        place: `${index + 1}.${index === 0 ? 'er' : 'º'} Lugar`, percentage,
+        estimatedAmount: Math.round(netPrizePool * percentage / 100), description: `${percentage}% de la bolsa neta`
+      })) : [],
       organizerId: '',
       organizer: {
         name: 'Organizador'
@@ -201,12 +207,47 @@ export const CreateTournamentWizard: React.FC<CreateTournamentWizardProps> = ({
     };
 
     try {
-      const savedTournament = await onTournamentCreated(created);
+      setIsPublishing(true);
+      const savedTournament = draftTournamentId ? { ...created, id: draftTournamentId } : await onTournamentCreated(created);
+      if (created.status === 'draft') {
+        setDraftTournamentId(savedTournament.id);
+        const clientSecret = await createOrganizerPaymentIntent(savedTournament.id);
+        setFundingClientSecret(clientSecret);
+        setIsPublishing(false);
+        return;
+      }
       confetti({ particleCount: 80, spread: 70, origin: { y: 0.5 } });
       onNavigate('tournament-detail', savedTournament.id);
     } catch (error) {
       setFormError(error instanceof Error ? error.message : 'No se pudo publicar el torneo.');
+    } finally {
+      setIsPublishing(false);
     }
+  };
+
+  const handleModeSelect = (mode: string) => {
+    setGameMode(mode);
+    const normalized = mode.toLowerCase();
+    const individual = normalized.includes('individual') || normalized.includes('solo ') || normalized.includes('1v1');
+    const sizeMatch = mode.match(/(\d+)v\d+|(?:dúo|dobles).*?(\d+)|escuadrón.*?(\d+)/i);
+    const teamSize = Number(sizeMatch?.[1] || sizeMatch?.[2] || sizeMatch?.[3] || selectedGame.minPlayers);
+    setParticipantType(individual ? 'individual' : 'team');
+    setMinPlayersPerTeam(individual ? 1 : Math.max(2, teamSize));
+  };
+
+  const handleBannerUpload = async (file?: File) => {
+    if (!file) return;
+    setFormError('');
+    setIsUploadingBanner(true);
+    try { setBannerUrl(await uploadTournamentBanner(file)); }
+    catch (error) { setFormError(error instanceof Error ? error.message : 'No se pudo subir la imagen.'); }
+    finally { setIsUploadingBanner(false); }
+  };
+
+  const handleFundingPaid = async () => {
+    await waitForOrganizerFunding(draftTournamentId);
+    confetti({ particleCount: 80, spread: 70, origin: { y: 0.5 } });
+    onNavigate('tournament-detail', draftTournamentId);
   };
 
   return (
@@ -297,13 +338,13 @@ export const CreateTournamentWizard: React.FC<CreateTournamentWizardProps> = ({
                 <Upload className="w-3.5 h-3.5 text-black" />
                 <span>Banner del Torneo (Opcional)</span>
               </label>
-              <input 
-                type="url" 
-                value={bannerUrl}
-                onChange={(e) => setBannerUrl(e.target.value)}
-                placeholder="https://... (URL de imagen o déjalo vacío para usar el preset oficial)"
-                className="w-full bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl p-3.5 text-xs text-black focus:border-black outline-none"
-              />
+              <label className="flex cursor-pointer items-center justify-center gap-2 rounded-2xl border border-dashed border-gray-400 bg-[#F9FAFB] p-5 text-xs font-bold hover:border-black">
+                <Upload className="h-4 w-4" />
+                {isUploadingBanner ? 'Subiendo imagen…' : bannerUrl ? 'Cambiar imagen' : 'Seleccionar imagen desde tu equipo'}
+                <input type="file" accept="image/jpeg,image/png,image/webp" disabled={isUploadingBanner} onChange={event => void handleBannerUpload(event.target.files?.[0])} className="sr-only" />
+              </label>
+              <p className="text-[11px] text-gray-500">Opcional · JPG, PNG o WebP · máximo 5 MB. Si no agregas una, se usará la imagen oficial de la disciplina seleccionada.</p>
+              {bannerUrl && <div className="relative overflow-hidden rounded-2xl border"><img src={bannerUrl} alt="Vista previa del banner" className="h-36 w-full object-cover" /><button type="button" onClick={() => setBannerUrl('')} className="absolute right-2 top-2 rounded-full bg-black px-3 py-1.5 text-[11px] font-bold text-white">Usar predeterminada</button></div>}
             </div>
 
             <div className="p-5 bg-[#F9FAFB] rounded-2xl border border-[#E5E7EB] space-y-4">
@@ -436,9 +477,7 @@ export const CreateTournamentWizard: React.FC<CreateTournamentWizardProps> = ({
                     </div>
                     <div className="p-2.5 bg-white flex-1">
                       <span className="font-bold text-xs text-black truncate block">{game.name}</span>
-                      <span className="text-[10px] text-gray-500">
-                        Mín. {game.minPlayers} {game.minPlayers === 1 ? 'jugador' : 'jugadores'}
-                      </span>
+                      <span className="text-[10px] text-gray-500">{game.formatLabel}</span>
                     </div>
                   </button>
                 ))}
@@ -452,7 +491,7 @@ export const CreateTournamentWizard: React.FC<CreateTournamentWizardProps> = ({
                 </label>
                 <select 
                   value={gameMode}
-                  onChange={(e) => setGameMode(e.target.value)}
+                  onChange={(e) => handleModeSelect(e.target.value)}
                   className="w-full bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl p-3 text-xs text-black outline-none font-medium"
                 >
                   {selectedGame.modes.map((mode, idx) => (
@@ -697,6 +736,12 @@ export const CreateTournamentWizard: React.FC<CreateTournamentWizardProps> = ({
 
             {prizeType !== 'no_prize' && sponsors.length > 0 && <div className="space-y-2">{sponsors.map(s => <div key={s.id} className="flex items-center justify-between rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] px-4 py-2 text-xs"><span><strong>{s.name}</strong> · ${s.contribution.toLocaleString()} MXN</span><button type="button" onClick={() => handleRemoveSponsor(s.id)} aria-label={`Quitar ${s.name}`}><Trash2 className="w-4 h-4" /></button></div>)}</div>}
 
+            {prizeType === 'monetary' && <div className="space-y-3 rounded-2xl border border-[#E5E7EB] p-4">
+              <div className="flex items-center justify-between"><div><h4 className="text-xs font-bold uppercase">Lugares premiados</h4><p className="text-[11px] text-gray-500">Puedes dejar solo el primer lugar o agregar más. El total debe ser 100%.</p></div><button type="button" disabled={prizePercentages.length >= 10} onClick={() => setPrizePercentages(values => [...values, 0])} className="rounded-full border px-3 py-2 text-xs font-bold disabled:opacity-40"><Plus className="inline h-3.5 w-3.5" /> Lugar</button></div>
+              <div className="grid gap-2 sm:grid-cols-2">{prizePercentages.map((percentage, index) => <div key={index} className="flex items-center gap-2 rounded-xl bg-[#F9FAFB] p-2"><span className="min-w-20 text-xs font-bold">{index + 1}.{index === 0 ? 'er' : 'º'} lugar</span><input aria-label={`Porcentaje del lugar ${index + 1}`} type="number" min={0} max={100} step={0.01} value={percentage} onChange={event => setPrizePercentages(values => values.map((value, itemIndex) => itemIndex === index ? Math.min(100, Math.max(0, Number(event.target.value))) : value))} className="min-w-0 flex-1 rounded-lg border bg-white p-2 text-xs" /><span className="text-xs font-bold">%</span>{prizePercentages.length > 1 && <button type="button" aria-label={`Quitar lugar ${index + 1}`} onClick={() => setPrizePercentages(values => values.filter((_, itemIndex) => itemIndex !== index))}><Trash2 className="h-4 w-4" /></button>}</div>)}</div>
+              <p className={`text-xs font-bold ${prizePercentageTotal === 100 ? 'text-green-700' : 'text-red-600'}`}>Total: {prizePercentageTotal}% {prizePercentageTotal === 100 ? '✓' : '— debe sumar 100%'}</p>
+            </div>}
+
             {/* Cálculo de la Bolsa de Premios */}
             {prizeType === 'monetary' && <div className="bg-black text-white p-6 rounded-3xl border border-gray-800 space-y-4 shadow-xs">
               <div className="flex justify-between items-center">
@@ -709,28 +754,16 @@ export const CreateTournamentWizard: React.FC<CreateTournamentWizardProps> = ({
                 </span>
               </div>
 
-              <div className="grid grid-cols-3 gap-3 text-xs pt-2 border-t border-gray-800">
-                <div className="bg-gray-900 border border-gray-800 p-3 rounded-2xl text-center">
-                  <span className="text-[10px] text-gray-400 block">1er Lugar (60%)</span>
-                  <span className="text-sm font-black text-white">${Math.round(netPrizePool * 0.6).toLocaleString()}</span>
-                </div>
-                <div className="bg-gray-900 border border-gray-800 p-3 rounded-2xl text-center">
-                  <span className="text-[10px] text-gray-400 block">2do Lugar (25%)</span>
-                  <span className="text-sm font-bold text-white">${Math.round(netPrizePool * 0.25).toLocaleString()}</span>
-                </div>
-                <div className="bg-gray-900 border border-gray-800 p-3 rounded-2xl text-center">
-                  <span className="text-[10px] text-gray-400 block">3er Lugar (15%)</span>
-                  <span className="text-sm font-bold text-white">${Math.round(netPrizePool * 0.15).toLocaleString()}</span>
-                </div>
-              </div>
+              <div className="grid gap-3 text-xs pt-2 border-t border-gray-800 sm:grid-cols-2 lg:grid-cols-3">{prizePercentages.map((percentage, index) => <div key={index} className="bg-gray-900 border border-gray-800 p-3 rounded-2xl text-center"><span className="text-[10px] text-gray-400 block">{index + 1}.{index === 0 ? 'er' : 'º'} Lugar ({percentage}%)</span><span className="text-sm font-black text-white">${Math.round(netPrizePool * percentage / 100).toLocaleString()}</span></div>)}</div>
               <p className="text-[10px] text-gray-400">Proyección con cupo completo. La bolsa real solo contabilizará inscripciones efectivamente pagadas y aportes confirmados.</p>
             </div>}
+            {fundingClientSecret && <div className="rounded-3xl border border-[#E5E7EB] bg-white p-5 shadow-sm"><h3 className="mb-1 text-lg font-black">Paga la bolsa inicial</h3><p className="mb-5 text-xs text-gray-500">El torneo permanecerá como borrador hasta que Stripe confirme el aporte.</p><OrganizerFundingPayment clientSecret={fundingClientSecret} amount={basePrizePool} onPaid={handleFundingPaid} /></div>}
           </div>
         )}
 
         {/* Wizard Footer Navigation */}
         {formError && <div role="alert" className="flex items-center gap-2 rounded-2xl border border-black bg-[#F9FAFB] px-4 py-3 text-xs font-bold"><AlertCircle className="w-4 h-4" />{formError}</div>}
-        <div className="flex justify-between items-center pt-4 border-t border-[#E5E7EB]">
+        {!fundingClientSecret && <div className="flex justify-between items-center pt-4 border-t border-[#E5E7EB]">
           {currentStep > 1 ? (
             <button 
               type="button" 
@@ -755,13 +788,14 @@ export const CreateTournamentWizard: React.FC<CreateTournamentWizardProps> = ({
             <button 
               type="button" 
               onClick={handleFinish}
+              disabled={isPublishing}
               className="px-6 py-2.5 rounded-full bg-black text-white text-xs font-bold hover:bg-gray-800 active:scale-95 transition-all flex items-center gap-2 cursor-pointer shadow-xs"
             >
               <CheckCircle2 className="w-4 h-4" />
-              <span>Publicar Torneo Oficial</span>
+              <span>{isPublishing ? 'Preparando pago…' : prizeType === 'monetary' ? 'Continuar al pago' : 'Publicar Torneo Oficial'}</span>
             </button>
           )}
-        </div>
+        </div>}
       </div>
     </div>
   );

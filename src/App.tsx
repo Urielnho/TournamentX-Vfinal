@@ -12,8 +12,9 @@ import { TeamsView } from './components/TeamsView';
 import { MatchesView } from './components/MatchesView';
 import { AdminDashboardView } from './components/AdminDashboardView';
 import { AuthModal } from './components/AuthModal';
+import { OrganizerFundingPayment } from './components/OrganizerFundingPayment';
 import { supabase } from './lib/supabase';
-import { insertRegistration, insertTeam, insertTournament, loadAppData } from './services/supabaseData';
+import { createRegistrationPaymentIntent, insertRegistration, insertTeam, insertTournament, loadAppData, waitForRegistrationPayment } from './services/supabaseData';
 
 const EMPTY_PROFILE: UserProfile = {
   id: '', name: 'Visitante', gamerTag: 'Visitante', globalRole: 'user', rank: 'Sin clasificación', level: 0,
@@ -36,6 +37,8 @@ export default function App() {
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [loadingData, setLoadingData] = useState(true);
   const [dataError, setDataError] = useState('');
+  const [paymentNotice, setPaymentNotice] = useState('');
+  const [registrationPayment, setRegistrationPayment] = useState<{ clientSecret: string; paymentIntentId: string; amount: number; tournamentTitle: string } | null>(null);
 
   const refreshData = useCallback(async (userId?: string) => {
     setLoadingData(true);
@@ -85,6 +88,41 @@ export default function App() {
     });
   }, [authUser, refreshData]);
 
+  useEffect(() => {
+    if (!authUser || !supabase) return;
+    const params = new URLSearchParams(window.location.search);
+    const payment = params.get('payment');
+    const sessionId = params.get('session_id');
+    if (payment === 'cancelled') {
+      setPaymentNotice('Pago cancelado. Tu inscripción aún no está confirmada.');
+      window.history.replaceState({}, '', window.location.pathname);
+      return;
+    }
+    if (payment !== 'success' || !sessionId?.startsWith('cs_')) return;
+    window.history.replaceState({}, '', window.location.pathname);
+    let stopped = false;
+    let attempts = 0;
+    let timer: number | undefined;
+    const poll = async () => {
+      attempts += 1;
+      const { data } = await supabase.from('transactions').select('status').eq('stripe_checkout_session_id', sessionId).maybeSingle();
+      if (stopped) return;
+      if (data?.status === 'PAID') {
+        setPaymentNotice('Pago confirmado. Tu inscripción ya está registrada.');
+        await refreshData(authUser.id);
+      } else if (data?.status === 'FAILED') {
+        setPaymentNotice('Stripe no pudo confirmar el pago. Inténtalo nuevamente.');
+      } else if (attempts < 10) {
+        setPaymentNotice('Pago recibido. Esperando confirmación segura de Stripe…');
+        timer = window.setTimeout(poll, 2000);
+      } else {
+        setPaymentNotice('El pago sigue en validación. Actualiza la página en unos momentos.');
+      }
+    };
+    void poll();
+    return () => { stopped = true; if (timer) window.clearTimeout(timer); };
+  }, [authUser, refreshData]);
+
   const requireSession = () => { if (authUser) return true; setShowAuthModal(true); return false; };
   const handleSignOut = async () => { await supabase?.auth.signOut(); setAuthUser(null); setCurrentView('home'); };
   const handleNavigate = (view: ViewMode, tournamentId?: string) => {
@@ -104,10 +142,26 @@ export default function App() {
 
   const handleRegister = async (tournamentId: string, teamName: string, _ign: string, type: 'team' | 'individual') => {
     if (!authUser) { setShowAuthModal(true); throw new Error('Inicia sesión para inscribirte.'); }
-    const teamId = type === 'team' ? await insertTeam(tournamentId, authUser.id, teamName, teamName.slice(0, 5).toUpperCase()) : undefined;
     const tournament = tournaments.find(item => item.id === tournamentId);
+    if (!tournament) throw new Error('El torneo ya no está disponible.');
+    const existingTeam = type === 'team' ? teams.find(team => team.tournamentId === tournamentId && team.captainId === authUser.id && team.name.toLowerCase() === teamName.trim().toLowerCase()) : undefined;
+    const teamId = type === 'team' ? existingTeam?.id || await insertTeam(tournamentId, authUser.id, teamName, teamName.slice(0, 5).toUpperCase()) : undefined;
+    if (tournament.entryFeeType !== 'free' && tournament.entryFeeAmount > 0) {
+      const payment = await createRegistrationPaymentIntent(tournamentId, teamId);
+      setRegistrationPayment({ ...payment, amount: tournament.entryFeeAmount, tournamentTitle: tournament.title });
+      return 'payment_pending' as const;
+    }
     await insertRegistration(tournamentId, authUser.id, teamId, tournament?.accessType === 'private' ? 'pending' : 'confirmed');
     await refreshData(authUser.id);
+    return 'confirmed' as const;
+  };
+
+  const handleRegistrationPaid = async () => {
+    if (!registrationPayment) return;
+    await waitForRegistrationPayment(registrationPayment.paymentIntentId);
+    setRegistrationPayment(null);
+    setPaymentNotice('Pago confirmado. Tu inscripción ya está registrada.');
+    await refreshData(authUser?.id);
   };
 
   const handleCreateTeam = async (tournamentId: string, name: string, tag: string) => {
@@ -150,12 +204,13 @@ export default function App() {
     <Navbar currentView={currentView} onNavigate={handleNavigate} user={userProfile} authUser={authUser} onSignIn={() => setShowAuthModal(true)} onSignOut={handleSignOut} />
     <main className="flex-1 bg-[#f5f6f8] text-black">
       {dataError && <div className="mx-auto mt-4 max-w-4xl rounded-2xl border border-red-200 bg-red-50 px-5 py-3 text-sm font-semibold text-red-700">{dataError}</div>}
+      {paymentNotice && <div className="mx-auto mt-4 flex max-w-4xl items-center justify-between gap-4 rounded-2xl border border-gray-200 bg-white px-5 py-3 text-sm font-semibold"><span>{paymentNotice}</span><button onClick={() => setPaymentNotice('')} className="text-xs text-gray-500">Cerrar</button></div>}
       {loadingData && <div className="mx-auto max-w-4xl px-6 py-4 text-center text-xs font-bold text-gray-500">Cargando datos de TournamentX…</div>}
       {currentView === 'home' && <HomeView tournaments={tournaments} onNavigate={handleNavigate} />}
       {currentView === 'tournaments' && <ExploreTournamentsView tournaments={tournaments} onNavigate={handleNavigate} />}
       {currentView === 'tournament-detail' && (currentTournament ? <TournamentDetailView tournament={currentTournament} matches={matches} participants={currentParticipants} onNavigate={handleNavigate} onRegister={handleRegister} /> : <EmptyState message="Este torneo no existe o ya no está disponible." onBack={() => handleNavigate('tournaments')} />)}
       {currentView === 'create-tournament' && authUser && <CreateTournamentWizard onTournamentCreated={handleTournamentCreated} onNavigate={handleNavigate} />}
-      {currentView === 'organizer-dashboard' && currentTournament?.isUserOrganizing && <OrganizerDashboardView transactions={transactions} pendingApprovals={pendingApprovals.filter(item => item.tournamentId === currentTournament.id)} tournaments={tournaments.filter(t => t.isUserOrganizing)} matches={matches.filter(match => match.tournamentId === currentTournament.id)} participants={currentParticipants} onNavigate={handleNavigate} onApproveTeam={id => void approveTeam(id)} onRejectTeam={id => void rejectTeam(id)} onUpdateMatchScore={(id, a, b) => void updateScore(id, a, b)} />}
+      {currentView === 'organizer-dashboard' && currentTournament?.isUserOrganizing && <OrganizerDashboardView transactions={transactions.filter(transaction => transaction.tournamentId === currentTournament.id)} pendingApprovals={pendingApprovals.filter(item => item.tournamentId === currentTournament.id)} tournaments={tournaments.filter(t => t.isUserOrganizing)} matches={matches.filter(match => match.tournamentId === currentTournament.id)} participants={currentParticipants} onNavigate={handleNavigate} onApproveTeam={id => void approveTeam(id)} onRejectTeam={id => void rejectTeam(id)} onUpdateMatchScore={(id, a, b) => void updateScore(id, a, b)} />}
       {currentView === 'profile' && authUser && <ProfileAthleteView user={userProfile} onUpdateUser={profile => void updateProfile(profile)} onNavigate={handleNavigate} />}
       {currentView === 'teams' && <TeamsView participants={teamCards} tournaments={tournaments} onNavigate={handleNavigate} onCreateTeam={handleCreateTeam} />}
       {currentView === 'matches' && <MatchesView matches={matches} onNavigate={handleNavigate} />}
@@ -163,6 +218,7 @@ export default function App() {
     </main>
     <footer className="border-t border-white/10 bg-black px-6 py-8 text-xs text-gray-400"><div className="mx-auto flex max-w-[1280px] flex-col items-center justify-between gap-4 sm:flex-row"><b className="text-base text-white">TOURNAMENTX</b><span>Esports y deportes competitivos · © 2026</span><div className="flex gap-5"><button onClick={() => handleNavigate('tournaments')}>Torneos</button><button onClick={() => handleNavigate('matches')}>Partidos</button><button onClick={() => handleNavigate('profile')}>Mi cuenta</button></div></div></footer>
     {showAuthModal && <AuthModal onClose={() => setShowAuthModal(false)} />}
+    {registrationPayment && <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"><div className="relative max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl"><button onClick={() => setRegistrationPayment(null)} className="absolute right-5 top-4 text-xl text-gray-500" aria-label="Cerrar pago">×</button><h2 className="pr-8 text-xl font-black">Paga tu inscripción</h2><p className="mb-5 text-sm text-gray-500">{registrationPayment.tournamentTitle}</p><OrganizerFundingPayment clientSecret={registrationPayment.clientSecret} amount={registrationPayment.amount} buttonLabel={`Pagar $${registrationPayment.amount.toLocaleString()} MXN e inscribirme`} onPaid={handleRegistrationPaid} /></div></div>}
   </div>;
 }
 

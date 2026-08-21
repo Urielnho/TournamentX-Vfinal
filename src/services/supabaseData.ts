@@ -5,6 +5,20 @@ const defaultBanner = 'https://images.unsplash.com/photo-1542751371-adc38448a05e
 
 const asNumber = (value: unknown) => Number(value ?? 0);
 
+export async function uploadTournamentBanner(file: File): Promise<string> {
+  if (!supabase) throw new Error('Supabase no está configurado.');
+  const allowedTypes = new Set(['image/jpeg', 'image/png', 'image/webp']);
+  if (!allowedTypes.has(file.type)) throw new Error('La imagen debe ser JPG, PNG o WebP.');
+  if (file.size > 5 * 1024 * 1024) throw new Error('La imagen no puede superar 5 MB.');
+  const { data: authData } = await supabase.auth.getUser();
+  if (!authData.user) throw new Error('Inicia sesión para subir una imagen.');
+  const extension = file.type === 'image/png' ? 'png' : file.type === 'image/webp' ? 'webp' : 'jpg';
+  const path = `${authData.user.id}/tournaments/${crypto.randomUUID()}.${extension}`;
+  const { error } = await supabase.storage.from('tournament-media').upload(path, file, { cacheControl: '3600', contentType: file.type, upsert: false });
+  if (error) throw error;
+  return supabase.storage.from('tournament-media').getPublicUrl(path).data.publicUrl;
+}
+
 export interface AppDatabaseData {
   tournaments: Tournament[];
   teams: Team[];
@@ -19,7 +33,7 @@ export async function loadAppData(userId?: string): Promise<AppDatabaseData> {
   if (!supabase) return { tournaments: [], teams: [], participants: [], matches: [], transactions: [], pendingApprovals: [], users: [] };
 
   const [tournamentResult, teamResult, memberResult, registrationResult, matchResult, transactionResult, profileResult, countResult] = await Promise.all([
-    supabase.from('tournaments').select('*, organizer:profiles!tournaments_organizer_id_fkey(full_name, avatar_url)').order('created_at', { ascending: false }),
+    supabase.from('tournaments').select('*, organizer:profiles!tournaments_organizer_id_fkey(full_name, avatar_url)').neq('status', 'draft').order('created_at', { ascending: false }),
     supabase.from('teams').select('*, captain:profiles!teams_captain_id_fkey(full_name, email)').order('created_at', { ascending: false }),
     supabase.from('team_members').select('team_id, user_id, member_role, joined_at, profile:profiles!team_members_user_id_fkey(full_name, gamer_tag, avatar_url)'),
     supabase.from('registrations').select('id, tournament_id, user_id, team_id, status, created_at'),
@@ -35,9 +49,11 @@ export async function loadAppData(userId?: string): Promise<AppDatabaseData> {
   const registrations = registrationResult.data ?? [];
   const registrationCounts = countResult.data ?? [];
   const members = memberResult.data ?? [];
+  const financialResults = await Promise.all((tournamentResult.data ?? []).map((row: any) => supabase.rpc('tournament_financial_summary', { target_tournament_id: row.id })));
   const tournaments: Tournament[] = (tournamentResult.data ?? []).map((row: any) => {
     const tournamentRegistrations = registrations.filter((registration: any) => registration.tournament_id === row.id && !['rejected', 'cancelled'].includes(registration.status));
-    const projectedPool = asNumber(row.base_prize_pool) + (row.entry_fee_type === 'free' ? 0 : tournamentRegistrations.length * asNumber(row.entry_fee_amount));
+    const financialRow = financialResults.find((_result, index) => tournamentResult.data?.[index]?.id === row.id)?.data?.[0];
+    const prizeAmount = asNumber(financialRow?.prize_amount_minor) / 100;
     return {
       id: row.id,
       title: row.title,
@@ -63,11 +79,21 @@ export async function loadAppData(userId?: string): Promise<AppDatabaseData> {
       organizerPercentage: asNumber(row.organizer_percentage),
       hasReceivedPayments: row.has_received_payments,
       prizeType: row.prize_type,
-      basePrizePool: asNumber(row.base_prize_pool),
+      basePrizePool: prizeAmount,
+      financials: {
+        registrationGross: asNumber(financialRow?.registration_gross_minor) / 100,
+        sponsorGross: asNumber(financialRow?.sponsor_gross_minor) / 100,
+        stripeFees: asNumber(financialRow?.stripe_fees_minor) / 100,
+        refunds: asNumber(financialRow?.refundable_adjustments_minor) / 100,
+        distributableNet: asNumber(financialRow?.distributable_net_minor) / 100,
+        organizerAmount: asNumber(financialRow?.organizer_amount_minor) / 100,
+        prizeAmount,
+        currency: financialRow?.currency?.toUpperCase() || 'MXN',
+      },
       otherPrizeDescription: row.other_prize_description ?? undefined,
       sponsors: Array.isArray(row.sponsors) ? row.sponsors : [],
       rules: Array.isArray(row.rules) ? row.rules : [],
-      prizesBreakdown: projectedPool > 0 ? [{ place: '1.º', percentage: 100, estimatedAmount: projectedPool }] : [],
+      prizesBreakdown: Array.isArray(row.prize_distribution) ? row.prize_distribution.map((item: any) => ({ ...item, estimatedAmount: Math.round(prizeAmount * asNumber(item.percentage) / 100) })) : (prizeAmount > 0 ? [{ place: '1.º', percentage: 100, estimatedAmount: prizeAmount }] : []),
       organizerId: row.organizer_id,
       organizer: { name: row.organizer?.full_name || 'Organizador', avatar: row.organizer?.avatar_url || undefined },
       isUserRegistered: Boolean(userId && tournamentRegistrations.some((registration: any) => registration.user_id === userId)),
@@ -150,7 +176,7 @@ export async function loadAppData(userId?: string): Promise<AppDatabaseData> {
     amount: asNumber(row.amount),
     currency: row.currency,
     status: row.status,
-    paymentMethod: row.provider_reference ? 'Proveedor externo' : 'Pendiente',
+    paymentMethod: row.payment_method || (row.provider_reference ? 'Proveedor externo' : 'Pendiente'),
     feeType: row.fee_type,
   }));
 
@@ -179,6 +205,10 @@ export async function loadAppData(userId?: string): Promise<AppDatabaseData> {
 
 export async function insertTournament(tournament: Tournament, organizerId: string): Promise<string> {
   if (!supabase) throw new Error('Supabase no está configurado.');
+  if (tournament.status === 'draft') {
+    const { data: reusableDraft } = await supabase.from('tournaments').select('id').eq('organizer_id', organizerId).eq('status', 'draft').eq('title', tournament.title).eq('base_prize_pool', tournament.basePrizePool).is('organizer_payment_intent_id', null).order('created_at', { ascending: false }).limit(1).maybeSingle();
+    if (reusableDraft) return reusableDraft.id;
+  }
   const { data, error } = await supabase.from('tournaments').insert({
     organizer_id: organizerId,
     title: tournament.title,
@@ -203,12 +233,41 @@ export async function insertTournament(tournament: Tournament, organizerId: stri
     organizer_percentage: tournament.organizerPercentage,
     prize_type: tournament.prizeType,
     base_prize_pool: tournament.basePrizePool,
+    prize_distribution: tournament.prizesBreakdown.map(({ place, percentage }) => ({ place, percentage })),
+    organizer_funding_status: tournament.prizeType === 'monetary' && tournament.basePrizePool > 0 ? 'pending' : 'not_required',
     other_prize_description: tournament.otherPrizeDescription || null,
     rules: tournament.rules,
     sponsors: tournament.sponsors,
   }).select('id').single();
   if (error) throw error;
   return data.id;
+}
+
+export async function createOrganizerPaymentIntent(tournamentId: string): Promise<string> {
+  if (!supabase) throw new Error('Supabase no está configurado.');
+  const { data, error } = await supabase.functions.invoke('create-organizer-payment-intent', { body: { tournamentId } });
+  if (error) {
+    let message = error.message;
+    try {
+      const response = (error as { context?: Response }).context;
+      const payload = response ? await response.clone().json() : null;
+      if (payload?.error) message = payload.error;
+    } catch { /* Response was not JSON. */ }
+    throw new Error(message);
+  }
+  if (!data?.clientSecret) throw new Error('Stripe no devolvió el formulario de pago.');
+  return data.clientSecret;
+}
+
+export async function waitForOrganizerFunding(tournamentId: string) {
+  if (!supabase) throw new Error('Supabase no está configurado.');
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    const { data } = await supabase.from('tournaments').select('status, organizer_funding_status').eq('id', tournamentId).single();
+    if (data?.organizer_funding_status === 'paid' && data.status === 'open') return;
+    if (data?.organizer_funding_status === 'failed') throw new Error('Stripe marcó el pago como fallido.');
+    await new Promise(resolve => window.setTimeout(resolve, 1500));
+  }
+  throw new Error('Stripe recibió el pago, pero la publicación sigue en validación. Actualiza en unos momentos.');
 }
 
 export async function insertRegistration(tournamentId: string, userId: string, teamId?: string, status: 'pending' | 'confirmed' = 'confirmed') {
@@ -223,4 +282,48 @@ export async function insertTeam(tournamentId: string, captainId: string, name: 
   if (error) throw error;
   await supabase.from('team_members').insert({ team_id: data.id, user_id: captainId, member_role: 'captain' });
   return data.id;
+}
+
+export async function startPaidRegistration(tournamentId: string, teamId?: string): Promise<never> {
+  if (!supabase) throw new Error('Supabase no está configurado.');
+  const { data, error } = await supabase.functions.invoke('create-checkout-session', { body: { tournamentId, teamId } });
+  if (error) {
+    let message = error.message;
+    try {
+      const response = (error as { context?: Response }).context;
+      const payload = response ? await response.clone().json() : null;
+      if (payload?.error) message = payload.error;
+    } catch { /* Supabase did not return a JSON error body. */ }
+    throw new Error(message);
+  }
+  if (!data?.checkoutUrl || typeof data.checkoutUrl !== 'string' || !data.checkoutUrl.startsWith('https://checkout.stripe.com/')) throw new Error('Stripe no devolvió una página de pago válida.');
+  window.location.assign(data.checkoutUrl);
+  return await new Promise<never>(() => undefined);
+}
+
+export async function createRegistrationPaymentIntent(tournamentId: string, teamId?: string) {
+  if (!supabase) throw new Error('Supabase no está configurado.');
+  const { data, error } = await supabase.functions.invoke('create-registration-payment-intent', { body: { tournamentId, teamId } });
+  if (error) {
+    let message = error.message;
+    try {
+      const response = (error as { context?: Response }).context;
+      const payload = response ? await response.clone().json() : null;
+      if (payload?.error) message = payload.error;
+    } catch { /* Response was not JSON. */ }
+    throw new Error(message);
+  }
+  if (!data?.clientSecret || !data?.paymentIntentId) throw new Error('Stripe no devolvió el formulario de pago.');
+  return { clientSecret: data.clientSecret as string, paymentIntentId: data.paymentIntentId as string };
+}
+
+export async function waitForRegistrationPayment(paymentIntentId: string) {
+  if (!supabase) throw new Error('Supabase no está configurado.');
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    const { data } = await supabase.from('transactions').select('status').eq('stripe_payment_intent_id', paymentIntentId).eq('fee_type', 'entry_fee').maybeSingle();
+    if (data?.status === 'PAID') return;
+    if (data?.status === 'FAILED') throw new Error('Stripe marcó el pago como fallido.');
+    await new Promise(resolve => window.setTimeout(resolve, 1500));
+  }
+  throw new Error('El pago sigue en validación. Actualiza en unos momentos.');
 }
