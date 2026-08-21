@@ -40,6 +40,18 @@ Deno.serve(async request => {
 
     const { error: eventError } = await admin.from('stripe_webhook_events').insert({ id: event.id, event_type: event.type, payload: event });
     if (eventError?.code !== '23505') throw eventError;
+    // Deliver any transactional emails queued by database triggers. This is
+    // intentionally best-effort: Stripe must not retry a valid payment event
+    // merely because the mail provider is temporarily unavailable.
+    fetch(`${supabaseUrl}/functions/v1/send-email-outbox`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${serviceKey}`,
+        apikey: serviceKey,
+        'Content-Type': 'application/json',
+      },
+      body: '{}',
+    }).catch(error => console.error('Email outbox invocation failed', error));
     return jsonResponse(request, { received: true });
   } catch (error) {
     console.error('Stripe webhook processing failed', error);

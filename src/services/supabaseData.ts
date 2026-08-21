@@ -5,6 +5,11 @@ const defaultBanner = 'https://images.unsplash.com/photo-1542751371-adc38448a05e
 
 const asNumber = (value: unknown) => Number(value ?? 0);
 
+export async function flushEmailOutbox() {
+  if (!supabase) return;
+  try { await supabase.functions.invoke('send-email-outbox', { body: {} }); } catch { /* Notifications retry later and never block the main action. */ }
+}
+
 export async function uploadTournamentBanner(file: File): Promise<string> {
   if (!supabase) throw new Error('Supabase no está configurado.');
   const allowedTypes = new Set(['image/jpeg', 'image/png', 'image/webp']);
@@ -73,6 +78,7 @@ async function teamRpc(name: string, args: Record<string, unknown>) {
   if (!supabase) throw new Error('Supabase no está configurado.');
   const { data, error } = await supabase.rpc(name, args);
   if (error) throw error;
+  void flushEmailOutbox();
   return data;
 }
 
@@ -322,6 +328,7 @@ export async function insertTournament(tournament: Tournament, organizerId: stri
     sponsors: tournament.sponsors,
   }).select('id').single();
   if (error) throw error;
+  void flushEmailOutbox();
   return data.id;
 }
 
@@ -365,7 +372,7 @@ export async function waitForOrganizerFunding(tournamentId: string) {
   if (!supabase) throw new Error('Supabase no está configurado.');
   for (let attempt = 0; attempt < 12; attempt += 1) {
     const { data } = await supabase.from('tournaments').select('status, organizer_funding_status').eq('id', tournamentId).single();
-    if (data?.organizer_funding_status === 'paid' && data.status === 'open') return;
+    if (data?.organizer_funding_status === 'paid' && data.status === 'open') { void flushEmailOutbox(); return; }
     if (data?.organizer_funding_status === 'failed') throw new Error('Stripe marcó el pago como fallido.');
     await new Promise(resolve => window.setTimeout(resolve, 1500));
   }
@@ -376,6 +383,7 @@ export async function insertRegistration(tournamentId: string, _userId: string, 
   if (!supabase) throw new Error('Supabase no está configurado.');
   const { error } = await supabase.rpc('create_free_registration', { target_tournament_id: tournamentId, target_team_id: teamId || null, selected_member_ids: memberIds, requested_status: status });
   if (error) throw error;
+  void flushEmailOutbox();
 }
 
 export async function insertTeam(tournamentId: string | undefined, captainId: string, name: string, tag: string, logoUrl?: string) {
@@ -387,6 +395,7 @@ export async function insertTeam(tournamentId: string | undefined, captainId: st
     await supabase.from('teams').delete().eq('id', data.id);
     throw memberError;
   }
+  void flushEmailOutbox();
   return data.id;
 }
 
@@ -427,7 +436,7 @@ export async function waitForRegistrationPayment(paymentIntentId: string) {
   if (!supabase) throw new Error('Supabase no está configurado.');
   for (let attempt = 0; attempt < 12; attempt += 1) {
     const { data } = await supabase.from('transactions').select('status').eq('stripe_payment_intent_id', paymentIntentId).eq('fee_type', 'entry_fee').maybeSingle();
-    if (data?.status === 'PAID') return;
+    if (data?.status === 'PAID') { void flushEmailOutbox(); return; }
     if (data?.status === 'FAILED') throw new Error('Stripe marcó el pago como fallido.');
     await new Promise(resolve => window.setTimeout(resolve, 1500));
   }
