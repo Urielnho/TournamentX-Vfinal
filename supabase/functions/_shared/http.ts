@@ -1,6 +1,7 @@
 const allowedOrigins = new Set([
   'http://localhost:3000',
   'https://tournament-x-vfinal.vercel.app',
+  'https://tournamentx.devti.tech',
 ]);
 
 export function corsHeaders(request: Request) {
