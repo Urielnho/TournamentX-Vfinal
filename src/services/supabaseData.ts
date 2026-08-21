@@ -106,8 +106,14 @@ export async function clearTournamentBracket(tournamentId: string) {
 
 export async function updateMatchSchedule(matchId: string, scheduledAt: string, streamUrl?: string) {
   if (!supabase) throw new Error('Supabase no está configurado.');
-  const { error } = await supabase.from('matches').update({ scheduled_at: scheduledAt || null, stream_url: streamUrl || null }).eq('id', matchId);
-  if (error) throw error;
+  const parsedDate = new Date(scheduledAt);
+  if (!scheduledAt || Number.isNaN(parsedDate.getTime())) throw new Error('Selecciona una fecha y hora válidas.');
+  const { error } = await supabase.rpc('schedule_tournament_match', {
+    target_match_id: matchId,
+    target_scheduled_at: parsedDate.toISOString(),
+    target_stream_url: streamUrl?.trim() || null,
+  });
+  if (error) throw new Error(error.message || 'No se pudo programar el partido.');
 }
 
 export async function loadAppData(userId?: string): Promise<AppDatabaseData> {

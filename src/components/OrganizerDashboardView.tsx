@@ -207,6 +207,16 @@ export const OrganizerDashboardView: React.FC<OrganizerDashboardViewProps> = ({
 
   const handleSaveSchedule = async (matchId: string) => {
     if (!scheduleDate) return setActionError('Selecciona la fecha y hora del partido.');
+    const selected = new Date(scheduleDate);
+    const startsAt = currentTourn ? new Date(currentTourn.startDate) : null;
+    const endsAt = currentTourn ? new Date(currentTourn.endDate) : null;
+    if (Number.isNaN(selected.getTime())) return setActionError('Selecciona una fecha y hora válidas.');
+    if (startsAt && selected < startsAt) return setActionError('El partido no puede programarse antes del inicio del torneo.');
+    if (endsAt && selected > endsAt) return setActionError('El partido no puede programarse después de la finalización del torneo.');
+    if (scheduleStream) {
+      try { if (new URL(scheduleStream).protocol !== 'https:') throw new Error(); }
+      catch { return setActionError('La transmisión del partido debe usar una URL HTTPS válida.'); }
+    }
     setActionError('');
     try { await onScheduleMatch(matchId, scheduleDate, scheduleStream); setEditingScheduleId(null); setActionSuccessMessage('Horario del partido actualizado.'); }
     catch (error) { setActionError(error instanceof Error ? error.message : 'No se pudo programar el partido.'); }
@@ -646,7 +656,7 @@ export const OrganizerDashboardView: React.FC<OrganizerDashboardViewProps> = ({
                   </div>
 
                   <div className="flex flex-col items-end gap-2">
-                  {editingScheduleId === m.id && <div className="flex flex-wrap items-center gap-2 rounded-xl border bg-white p-2"><input type="datetime-local" value={scheduleDate} onChange={e=>setScheduleDate(e.target.value)} className="rounded-lg border p-1.5 text-xs"/><input type="url" value={scheduleStream} onChange={e=>setScheduleStream(e.target.value)} placeholder="Stream HTTPS (opcional)" className="rounded-lg border p-1.5 text-xs"/><button onClick={()=>void handleSaveSchedule(m.id)} className="rounded-lg bg-black px-3 py-1.5 font-bold text-white">Guardar horario</button></div>}
+                  {editingScheduleId === m.id && <div className="flex flex-wrap items-center gap-2 rounded-xl border bg-white p-2"><input type="datetime-local" value={scheduleDate} min={currentTourn?.startDate ? new Date(new Date(currentTourn.startDate).getTime() - new Date(currentTourn.startDate).getTimezoneOffset()*60000).toISOString().slice(0,16) : undefined} max={currentTourn?.endDate ? new Date(new Date(currentTourn.endDate).getTime() - new Date(currentTourn.endDate).getTimezoneOffset()*60000).toISOString().slice(0,16) : undefined} onChange={e=>setScheduleDate(e.target.value)} className="rounded-lg border p-1.5 text-xs"/><input type="url" value={scheduleStream} onChange={e=>setScheduleStream(e.target.value)} placeholder="Stream HTTPS (opcional)" className="rounded-lg border p-1.5 text-xs"/><button onClick={()=>void handleSaveSchedule(m.id)} className="rounded-lg bg-black px-3 py-1.5 font-bold text-white">Guardar horario</button></div>}
                   {editingMatchId === m.id ? (
                     <div className="flex items-center gap-3 bg-white p-2 rounded-2xl border border-[#E5E7EB]">
                       <div className="flex items-center gap-1.5">
