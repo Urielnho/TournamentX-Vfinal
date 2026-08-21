@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import type { User as SupabaseUser } from '@supabase/supabase-js';
 import { ViewMode, Tournament, Participant, Transaction, PendingApproval, UserProfile, Team } from './types';
 import { INITIAL_TOURNAMENTS, INITIAL_USER_PROFILE, INITIAL_TRANSACTIONS, INITIAL_PENDING_APPROVALS, INITIAL_MATCHES, INITIAL_PARTICIPANTS, INITIAL_TEAMS } from './data/mockData';
 import { Navbar } from './components/Navbar';
@@ -11,6 +12,8 @@ import { ProfileAthleteView } from './components/ProfileAthleteView';
 import { TeamsView } from './components/TeamsView';
 import { MatchesView } from './components/MatchesView';
 import { AdminDashboardView } from './components/AdminDashboardView';
+import { AuthModal } from './components/AuthModal';
+import { supabase } from './lib/supabase';
 
 export default function App() {
   const [currentView, setCurrentView] = useState<ViewMode>('home');
@@ -22,6 +25,37 @@ export default function App() {
   const [matches, setMatches] = useState(INITIAL_MATCHES);
   const [participants, setParticipants] = useState<Participant[]>(INITIAL_PARTICIPANTS);
   const [teams, setTeams] = useState<Team[]>(INITIAL_TEAMS);
+  const [authUser, setAuthUser] = useState<SupabaseUser | null>(null);
+  const [showAuthModal, setShowAuthModal] = useState(false);
+
+  useEffect(() => {
+    if (!supabase) return;
+    supabase.auth.getSession().then(({ data }) => setAuthUser(data.session?.user ?? null));
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      setAuthUser(session?.user ?? null);
+      if (session?.user) setShowAuthModal(false);
+    });
+    return () => listener.subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (!authUser) return;
+    const metadata = authUser.user_metadata;
+    setUserProfile(previous => ({
+      ...previous,
+      id: authUser.id,
+      name: metadata.full_name || metadata.name || previous.name,
+      gamerTag: metadata.preferred_username || metadata.user_name || metadata.full_name || previous.gamerTag,
+      email: authUser.email || previous.email,
+      avatarUrl: metadata.avatar_url || metadata.picture || previous.avatarUrl,
+    }));
+  }, [authUser]);
+
+  const handleSignOut = async () => {
+    await supabase?.auth.signOut();
+    setAuthUser(null);
+    setCurrentView('home');
+  };
 
   const handleNavigate = (view: ViewMode, tournamentId?: string) => {
     if (tournamentId) setSelectedTournamentId(tournamentId);
@@ -65,7 +99,7 @@ export default function App() {
   const currentTournament = tournaments.find(t => t.id === selectedTournamentId) || tournaments[0];
 
   return <div className="flex min-h-screen flex-col bg-white text-black selection:bg-black selection:text-white">
-    <Navbar currentView={currentView} onNavigate={handleNavigate} user={userProfile} />
+    <Navbar currentView={currentView} onNavigate={handleNavigate} user={userProfile} authUser={authUser} onSignIn={() => setShowAuthModal(true)} onSignOut={handleSignOut} />
     <main className="flex-1 bg-[#f5f6f8] text-black">
       {currentView === 'home' && <HomeView tournaments={tournaments} onNavigate={handleNavigate} />}
       {currentView === 'tournaments' && <ExploreTournamentsView tournaments={tournaments} onNavigate={handleNavigate} />}
@@ -78,5 +112,6 @@ export default function App() {
       {currentView === 'admin-panel' && userProfile.globalRole === 'admin' && <AdminDashboardView tournaments={tournaments} teams={teams} transactions={transactions} currentUser={userProfile} onNavigate={handleNavigate} onDeleteTournament={deleteTournament} onUpdateUserStatus={() => undefined} onDeleteUser={() => undefined} onDeleteTeam={deleteTeam} />}
     </main>
     <footer className="border-t border-white/10 bg-black px-6 py-8 text-xs text-gray-400"><div className="mx-auto flex max-w-[1280px] flex-col items-center justify-between gap-4 sm:flex-row"><b className="text-base text-white">TOURNAMENTX</b><span>Esports y deportes competitivos · © 2026</span><div className="flex gap-5"><button onClick={() => handleNavigate('tournaments')}>Torneos</button><button onClick={() => handleNavigate('matches')}>Partidos</button><button onClick={() => handleNavigate('profile')}>Mi cuenta</button></div></div></footer>
+    {showAuthModal && <AuthModal onClose={() => setShowAuthModal(false)} />}
   </div>;
 }

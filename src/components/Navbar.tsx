@@ -1,11 +1,19 @@
 import React, { useState } from 'react';
+import type { User as SupabaseUser } from '@supabase/supabase-js';
 import { ViewMode, UserProfile } from '../types';
-import { Bell, ChevronDown, CreditCard, History, LogOut, Menu, Search, Settings, Trophy, User, X } from 'lucide-react';
+import { Bell, ChevronDown, CreditCard, History, LogIn, LogOut, Menu, Search, Settings, Trophy, User, X } from 'lucide-react';
 
-interface NavbarProps { currentView: ViewMode; onNavigate: (view: ViewMode, tournamentId?: string) => void; user: UserProfile; }
+interface NavbarProps {
+  currentView: ViewMode;
+  onNavigate: (view: ViewMode, tournamentId?: string) => void;
+  user: UserProfile;
+  authUser: SupabaseUser | null;
+  onSignIn: () => void;
+  onSignOut: () => Promise<void>;
+}
 const links: { label: string; view: ViewMode }[] = [{ label: 'Inicio', view: 'home' }, { label: 'Equipos', view: 'teams' }, { label: 'Torneos', view: 'tournaments' }, { label: 'Partidos', view: 'matches' }];
 
-export const Navbar: React.FC<NavbarProps> = ({ currentView, onNavigate, user }) => {
+export const Navbar: React.FC<NavbarProps> = ({ currentView, onNavigate, user, authUser, onSignIn, onSignOut }) => {
   const [profileOpen, setProfileOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -22,9 +30,9 @@ export const Navbar: React.FC<NavbarProps> = ({ currentView, onNavigate, user })
         <div className="relative"><button aria-label="Notificaciones" onClick={() => { setNotificationsOpen(!notificationsOpen); setProfileOpen(false); }} className="relative rounded-xl border border-[#E5E7EB] bg-[#F8F9FA] p-2.5 hover:border-black"><Bell className="h-4 w-4" /><span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-black" /></button>
           {notificationsOpen && <div className="absolute right-0 mt-3 w-80 rounded-2xl border border-[#E5E7EB] bg-white p-4 shadow-2xl"><p className="mb-3 text-sm font-black">Notificaciones</p><div className="space-y-3 text-xs"><div className="border-l-2 border-black pl-3"><b>Partido programado</b><p className="mt-1 text-gray-500">Fortnite Cup comienza hoy a las 19:00.</p></div><div className="border-l-2 border-gray-400 pl-3"><b>Invitación recibida</b><p className="mt-1 text-gray-500">Rocket Kings te invitó a su equipo.</p></div></div></div>}
         </div>
-        <div className="relative"><button onClick={() => { setProfileOpen(!profileOpen); setNotificationsOpen(false); }} className="flex items-center gap-2 rounded-xl border border-[#E5E7EB] bg-[#F8F9FA] p-1.5 pr-2 hover:border-black"><img src={user.avatarUrl} alt="" className="h-7 w-7 rounded-lg object-cover" /><span className="hidden text-xs font-bold sm:block">{user.gamerTag}</span><ChevronDown className="h-3.5 w-3.5 text-gray-400" /></button>
-          {profileOpen && <div className="absolute right-0 mt-3 w-60 rounded-2xl border border-[#E5E7EB] bg-white p-2 shadow-2xl"><div className="border-b border-[#E5E7EB] px-3 py-2"><p className="text-sm font-bold">{user.name}</p><p className="text-[11px] text-gray-500">Jugador-Usuario</p></div>{accountItems.map(([Icon, label]) => <button key={label} onClick={() => go('profile')} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-xs font-semibold text-gray-600 hover:bg-[#F8F9FA] hover:text-black"><Icon className="h-4 w-4" />{label}</button>)}<button className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-xs font-semibold text-gray-500 hover:bg-[#F8F9FA] hover:text-black"><LogOut className="h-4 w-4" />Cerrar sesión</button></div>}
-        </div>
+        {authUser ? <div className="relative"><button onClick={() => { setProfileOpen(!profileOpen); setNotificationsOpen(false); }} className="flex items-center gap-2 rounded-xl border border-[#E5E7EB] bg-[#F8F9FA] p-1.5 pr-2 hover:border-black"><img src={user.avatarUrl} alt="" className="h-7 w-7 rounded-lg object-cover" /><span className="hidden text-xs font-bold sm:block">{user.gamerTag}</span><ChevronDown className="h-3.5 w-3.5 text-gray-400" /></button>
+          {profileOpen && <div className="absolute right-0 mt-3 w-60 rounded-2xl border border-[#E5E7EB] bg-white p-2 shadow-2xl"><div className="border-b border-[#E5E7EB] px-3 py-2"><p className="text-sm font-bold">{user.name}</p><p className="truncate text-[11px] text-gray-500">{authUser.email}</p></div>{accountItems.map(([Icon, label]) => <button key={label} onClick={() => go('profile')} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-xs font-semibold text-gray-600 hover:bg-[#F8F9FA] hover:text-black"><Icon className="h-4 w-4" />{label}</button>)}<button onClick={() => void onSignOut()} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-xs font-semibold text-gray-500 hover:bg-[#F8F9FA] hover:text-black"><LogOut className="h-4 w-4" />Cerrar sesión</button></div>}
+        </div> : <button onClick={onSignIn} className="flex items-center gap-2 rounded-xl bg-black px-4 py-2.5 text-xs font-black text-white transition hover:bg-gray-800"><LogIn className="h-4 w-4" /><span className="hidden sm:inline">Iniciar sesión</span></button>}
         <button aria-label="Abrir menú" onClick={() => setMobileOpen(!mobileOpen)} className="rounded-xl border border-white/10 p-2.5 md:hidden">{mobileOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}</button>
       </div>
     </div>
