@@ -24,6 +24,8 @@ import {
   TeamInvitationSummary,
   TeamJoinRequestSummary,
 } from "../services/supabaseData";
+import { ConfirmDialog } from "./ConfirmDialog";
+import { FeedbackToast } from "./FeedbackToast";
 
 interface TeamsViewProps {
   teams: Team[];
@@ -54,6 +56,7 @@ export const TeamsView: React.FC<TeamsViewProps> = ({
   const [isCreating, setIsCreating] = useState(false);
   const [createdTeam, setCreatedTeam] = useState<{id:string;name:string}|null>(null);
   const [postCreateInvite, setPostCreateInvite] = useState("");
+  const [confirmation, setConfirmation] = useState<{message:string;action:()=>void;destructive:boolean}|null>(null);
 
   const reloadCollaboration = useCallback(async () => {
     if (!currentUser.id) return;
@@ -160,9 +163,7 @@ export const TeamsView: React.FC<TeamsViewProps> = ({
     }
   };
   const closeCreateFlow=()=>{setShowCreateModal(false);setCreatedTeam(null);setPostCreateInvite("");};
-  const confirmAction = (message: string, action: () => void) => {
-    if (window.confirm(message)) action();
-  };
+  const confirmAction = (message: string, action: () => void, destructive=true) => setConfirmation({message,action,destructive});
 
   return (
     <div className="mx-auto flex w-full max-w-[1280px] flex-col gap-6 px-4 py-8 text-black md:px-8">
@@ -185,24 +186,7 @@ export const TeamsView: React.FC<TeamsViewProps> = ({
           Crear equipo
         </button>
       </div>
-      {(notice || error) && (
-        <div
-          role="status"
-          className={`flex items-center justify-between gap-3 rounded-2xl border p-3 text-xs font-semibold ${error ? "border-red-200 bg-red-50 text-red-700" : "border-green-200 bg-green-50 text-green-800"}`}
-        >
-          <span>{error || notice}</span>
-          <button
-            aria-label="Cerrar aviso"
-            onClick={() => {
-              setNotice("");
-              setError("");
-            }}
-            className="rounded-lg px-2 py-1 text-base leading-none hover:bg-black/5"
-          >
-            ×
-          </button>
-        </div>
-      )}
+      {(notice||error)&&<FeedbackToast message={error||notice} type={error?'error':'success'} onClose={()=>{setNotice('');setError('');}}/>}
       <div className="flex gap-2 overflow-x-auto border-b border-gray-200 pb-3">
         {(
           [
@@ -551,7 +535,6 @@ export const TeamsView: React.FC<TeamsViewProps> = ({
               ×
             </button>
             <h3 className="text-lg font-black">{createdTeam?`Invita jugadores a ${createdTeam.name}`:"Crear equipo reutilizable"}</h3>
-            {(notice||error)&&<div className={`mt-3 rounded-xl p-3 text-xs font-semibold ${error?"bg-red-50 text-red-700":"bg-green-50 text-green-800"}`}>{error||notice}</div>}
             {createdTeam ? <div className="mt-5 space-y-4 text-xs">
               <p className="text-gray-600">Invita ahora por usuario o correo. También puedes compartir un enlace.</p>
               <div className="flex gap-2"><input value={postCreateInvite} onChange={e=>setPostCreateInvite(e.target.value)} placeholder="GamerTag o correo exacto" className="min-w-0 flex-1 rounded-xl border p-3"/><button disabled={!postCreateInvite.trim()} onClick={()=>void runAction(async()=>{await inviteTeamMember(createdTeam.id,postCreateInvite.trim());setPostCreateInvite("");},"Invitación enviada correctamente.")} className="rounded-xl bg-black px-4 font-bold text-white disabled:opacity-40">Invitar</button></div>
@@ -607,6 +590,7 @@ export const TeamsView: React.FC<TeamsViewProps> = ({
           </div>
         </div>
       )}
+      <ConfirmDialog open={Boolean(confirmation)} message={confirmation?.message||''} destructive={confirmation?.destructive} confirmLabel="Sí, continuar" onCancel={()=>setConfirmation(null)} onConfirm={()=>{const action=confirmation?.action;setConfirmation(null);action?.();}} />
     </div>
   );
 };

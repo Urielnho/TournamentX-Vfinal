@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { uploadTournamentBanner } from '../services/supabaseData';
+import { ConfirmDialog } from './ConfirmDialog';
 
 interface OrganizerDashboardViewProps {
   activeTournamentId: string;
@@ -71,6 +72,7 @@ export const OrganizerDashboardView: React.FC<OrganizerDashboardViewProps> = ({
   const [actionSuccessMessage, setActionSuccessMessage] = useState<string | null>(null);
   const [actionError, setActionError] = useState('');
   const [isGeneratingBracket, setIsGeneratingBracket] = useState(false);
+  const [confirmClearBracket,setConfirmClearBracket]=useState(false);
   useEffect(()=>{if(!actionSuccessMessage)return;const timer=window.setTimeout(()=>setActionSuccessMessage(null),5000);return()=>window.clearTimeout(timer);},[actionSuccessMessage]);
   useEffect(()=>{if(!actionError)return;const timer=window.setTimeout(()=>setActionError(''),7000);return()=>window.clearTimeout(timer);},[actionError]);
 
@@ -201,7 +203,6 @@ export const OrganizerDashboardView: React.FC<OrganizerDashboardViewProps> = ({
   };
 
   const handleClearBracket = async () => {
-    if (!window.confirm('¿Eliminar todos los partidos de esta llave? Esta acción no se puede deshacer.')) return;
     setActionError('');
     try { await onClearBracket(activeTournamentId); setActionSuccessMessage('Bracket eliminado. Ya puedes generar uno nuevo.'); }
     catch (error) { setActionError(error instanceof Error ? error.message : 'No se pudo eliminar el bracket.'); }
@@ -640,7 +641,7 @@ export const OrganizerDashboardView: React.FC<OrganizerDashboardViewProps> = ({
           <div className="bg-white p-6 rounded-3xl border border-[#E5E7EB] space-y-4 shadow-xs">
             <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
               <div><h3 className="text-sm font-extrabold text-black">Organizar Partidos y Bracket</h3><p className="text-xs text-gray-500">Genera cruces únicamente con inscripciones confirmadas, programa horarios y captura resultados.</p></div>
-              <div className="flex gap-2">{matches.length === 0 ? <button onClick={() => void handleGenerateBracket()} disabled={isGeneratingBracket || participants.length < 2} className="rounded-full bg-black px-4 py-2 text-xs font-bold text-white disabled:opacity-40">{isGeneratingBracket ? 'Generando…' : 'Generar bracket'}</button> : <button onClick={() => void handleClearBracket()} className="rounded-full border border-red-200 px-4 py-2 text-xs font-bold text-red-700">Regenerar llave</button>}</div>
+              <div className="flex gap-2">{matches.length === 0 ? <button onClick={() => void handleGenerateBracket()} disabled={isGeneratingBracket || participants.length < 2} className="rounded-full bg-black px-4 py-2 text-xs font-bold text-white disabled:opacity-40">{isGeneratingBracket ? 'Generando…' : 'Generar bracket'}</button> : <button onClick={() => setConfirmClearBracket(true)} className="rounded-full border border-red-200 px-4 py-2 text-xs font-bold text-red-700">Regenerar llave</button>}</div>
             </div>
 
             <div className="space-y-3">
@@ -837,6 +838,8 @@ export const OrganizerDashboardView: React.FC<OrganizerDashboardViewProps> = ({
           </div>
         </div>
       )}
+
+      <ConfirmDialog open={confirmClearBracket} title="Regenerar llave" message="Se eliminarán todos los partidos y marcadores actuales de esta llave. Esta acción no se puede deshacer." destructive confirmLabel="Eliminar llave" onCancel={()=>setConfirmClearBracket(false)} onConfirm={()=>{setConfirmClearBracket(false);void handleClearBracket();}} />
 
     </div>
   );

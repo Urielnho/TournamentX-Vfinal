@@ -1,0 +1,4 @@
+import React from 'react';
+import { AlertCircle, CheckCircle2, X } from 'lucide-react';
+
+export const FeedbackToast: React.FC<{message:string;type:'success'|'error';onClose:()=>void}> = ({message,type,onClose}) => <div role={type==='error'?'alert':'status'} className={`fixed right-4 top-20 z-[130] flex w-[min(24rem,calc(100vw-2rem))] items-start gap-3 rounded-2xl border bg-white p-4 shadow-2xl ${type==='error'?'border-red-200':'border-green-200'}`}><div className={type==='error'?'text-red-600':'text-green-600'}>{type==='error'?<AlertCircle className="h-5 w-5"/>:<CheckCircle2 className="h-5 w-5"/>}</div><div className="min-w-0 flex-1"><p className="text-xs font-black">{type==='error'?'No se pudo completar':'Acción completada'}</p><p className="mt-1 text-xs leading-5 text-gray-600">{message}</p></div><button onClick={onClose} aria-label="Cerrar aviso" className="text-gray-400 hover:text-black"><X className="h-4 w-4"/></button></div>;
