@@ -71,6 +71,8 @@ export const OrganizerDashboardView: React.FC<OrganizerDashboardViewProps> = ({
   const [actionSuccessMessage, setActionSuccessMessage] = useState<string | null>(null);
   const [actionError, setActionError] = useState('');
   const [isGeneratingBracket, setIsGeneratingBracket] = useState(false);
+  useEffect(()=>{if(!actionSuccessMessage)return;const timer=window.setTimeout(()=>setActionSuccessMessage(null),5000);return()=>window.clearTimeout(timer);},[actionSuccessMessage]);
+  useEffect(()=>{if(!actionError)return;const timer=window.setTimeout(()=>setActionError(''),7000);return()=>window.clearTimeout(timer);},[actionError]);
 
   // Manual Add Team state
   const [showAddTeamModal, setShowAddTeamModal] = useState(false);
@@ -364,7 +366,7 @@ export const OrganizerDashboardView: React.FC<OrganizerDashboardViewProps> = ({
             <button onClick={() => setActionSuccessMessage(null)} className="text-gray-400 hover:text-white text-xs">✕</button>
           </div>
         )}
-        {actionError && <div className="rounded-2xl border border-red-200 bg-red-50 p-3.5 text-xs font-bold text-red-700">{actionError}</div>}
+        {actionError && <div role="alert" className="flex items-center justify-between gap-3 rounded-2xl border border-red-200 bg-red-50 p-3.5 text-xs font-bold text-red-700"><span>{actionError}</span><button aria-label="Cerrar error" onClick={()=>setActionError('')} className="px-2 text-base">×</button></div>}
 
         {/* TAB 1: RESUMEN GENERAL */}
         {activeSidebarItem === 'resumen' && (

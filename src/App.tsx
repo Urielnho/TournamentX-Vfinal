@@ -62,6 +62,7 @@ export default function App() {
   const [globalSearchQuery, setGlobalSearchQuery] = useState('');
   const [registrationPayment, setRegistrationPayment] = useState<{ clientSecret: string; paymentIntentId: string; amount: number; tournamentTitle: string } | null>(null);
   const dataRequestId = useRef(0);
+  useEffect(()=>{if(!paymentNotice)return;const timer=window.setTimeout(()=>setPaymentNotice(''),6000);return()=>window.clearTimeout(timer);},[paymentNotice]);
 
   const refreshData = useCallback(async (userId?: string) => {
     const requestId = ++dataRequestId.current;
