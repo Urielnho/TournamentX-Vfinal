@@ -90,6 +90,7 @@ export const requestToJoinTeam = (teamId: string) => teamRpc('request_to_join_te
 export const respondTeamJoinRequest = (requestId: string, approve: boolean) => teamRpc('respond_team_join_request', { target_request_id: requestId, approve });
 export const removeTeamMember = (teamId: string, userId: string) => teamRpc('remove_team_member', { target_team_id: teamId, target_user_id: userId });
 export const leaveTeam = (teamId: string) => teamRpc('leave_team', { target_team_id: teamId });
+export const archiveTeam = (teamId: string) => teamRpc('archive_team', { target_team_id: teamId });
 
 export async function generateTournamentBracket(tournamentId: string): Promise<number> {
   if (!supabase) throw new Error('Supabase no está configurado.');
@@ -121,7 +122,7 @@ export async function loadAppData(userId?: string): Promise<AppDatabaseData> {
 
   const [tournamentResult, teamResult, memberResult, registrationResult, rosterResult, matchResult, transactionResult, profileResult, countResult] = await Promise.all([
     supabase.from('tournaments').select('*, organizer:profiles!tournaments_organizer_id_fkey(full_name, avatar_url)').neq('status', 'draft').order('created_at', { ascending: false }),
-    supabase.from('teams').select('*, captain:profiles!teams_captain_id_fkey(full_name, email)').order('created_at', { ascending: false }),
+    supabase.from('teams').select('*, captain:profiles!teams_captain_id_fkey(full_name, email)').is('archived_at',null).order('created_at', { ascending: false }),
     supabase.from('team_members').select('team_id, user_id, member_role, joined_at, profile:profiles!team_members_user_id_fkey(full_name, gamer_tag, avatar_url)'),
     supabase.from('registrations').select('id, tournament_id, user_id, team_id, status, created_at'),
     supabase.from('registration_members').select('registration_id, user_id, registration:registrations!registration_members_registration_id_fkey(tournament_id, status)'),

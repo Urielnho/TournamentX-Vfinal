@@ -1,48 +1,606 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Team, UserProfile } from '../types';
-import { Plus, Search, Users, Copy, UserPlus, Trash2, LogOut } from 'lucide-react';
-import confetti from 'canvas-confetti';
-import { acceptTeamInvitation, createTeamInviteLink, inviteTeamMember, leaveTeam, loadTeamCollaboration, rejectTeamInvitation, removeTeamMember, requestToJoinTeam, respondTeamJoinRequest, TeamInvitationSummary, TeamJoinRequestSummary } from '../services/supabaseData';
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { Team, UserProfile } from "../types";
+import {
+  Plus,
+  Search,
+  Users,
+  Copy,
+  UserPlus,
+  Trash2,
+  LogOut,
+} from "lucide-react";
+import confetti from "canvas-confetti";
+import {
+  acceptTeamInvitation,
+  archiveTeam,
+  createTeamInviteLink,
+  inviteTeamMember,
+  leaveTeam,
+  loadTeamCollaboration,
+  rejectTeamInvitation,
+  removeTeamMember,
+  requestToJoinTeam,
+  respondTeamJoinRequest,
+  TeamInvitationSummary,
+  TeamJoinRequestSummary,
+} from "../services/supabaseData";
 
-interface TeamsViewProps { teams: Team[]; currentUser: UserProfile; onCreateTeam: (name: string, tag: string, logoFile?: File) => Promise<void>; onRefresh: () => Promise<void>; }
-type Tab = 'mine' | 'managed' | 'explore' | 'invites' | 'requests';
+interface TeamsViewProps {
+  teams: Team[];
+  currentUser: UserProfile;
+  onCreateTeam: (name: string, tag: string, logoFile?: File) => Promise<void>;
+  onRefresh: () => Promise<void>;
+}
+type Tab = "mine" | "managed" | "explore" | "invites" | "requests";
 
-export const TeamsView: React.FC<TeamsViewProps> = ({ teams, currentUser, onCreateTeam, onRefresh }) => {
-  const [activeTab, setActiveTab] = useState<Tab>('mine');
-  const [search, setSearch] = useState('');
+export const TeamsView: React.FC<TeamsViewProps> = ({
+  teams,
+  currentUser,
+  onCreateTeam,
+  onRefresh,
+}) => {
+  const [activeTab, setActiveTab] = useState<Tab>("mine");
+  const [search, setSearch] = useState("");
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
-  const [teamName, setTeamName] = useState('');
-  const [teamTag, setTeamTag] = useState('');
+  const [teamName, setTeamName] = useState("");
+  const [teamTag, setTeamTag] = useState("");
   const [teamLogo, setTeamLogo] = useState<File | null>(null);
-  const [inviteQuery, setInviteQuery] = useState('');
+  const [inviteQuery, setInviteQuery] = useState("");
   const [invitations, setInvitations] = useState<TeamInvitationSummary[]>([]);
   const [requests, setRequests] = useState<TeamJoinRequestSummary[]>([]);
-  const [notice, setNotice] = useState('');
-  const [error, setError] = useState('');
+  const [notice, setNotice] = useState("");
+  const [error, setError] = useState("");
   const [isCreating, setIsCreating] = useState(false);
 
-  const reloadCollaboration = useCallback(async () => { if (!currentUser.id) return; try { const data = await loadTeamCollaboration(); setInvitations(data.invitations); setRequests(data.requests); } catch (reason) { setError(reason instanceof Error ? reason.message : 'No se pudieron cargar las invitaciones.'); } }, [currentUser.id]);
-  useEffect(() => { void reloadCollaboration(); }, [reloadCollaboration]);
-  useEffect(() => { if (!notice && !error) return; const timer=window.setTimeout(()=>{setNotice('');setError('');},5000); return()=>window.clearTimeout(timer); }, [notice,error]);
-  useEffect(() => { if (selectedTeam) setSelectedTeam(teams.find(team => team.id === selectedTeam.id) || null); }, [teams, selectedTeam?.id]);
-  useEffect(() => { const token = new URLSearchParams(window.location.search).get('invite'); if (!token || !currentUser.id) return; void acceptTeamInvitation(token).then(async () => { setNotice('Invitación aceptada. Ya formas parte del equipo.'); window.history.replaceState({}, '', '/equipos'); await onRefresh(); await reloadCollaboration(); }).catch(reason => setError(reason instanceof Error ? reason.message : 'No se pudo aceptar el enlace.')); }, [currentUser.id, onRefresh, reloadCollaboration]);
+  const reloadCollaboration = useCallback(async () => {
+    if (!currentUser.id) return;
+    try {
+      const data = await loadTeamCollaboration();
+      setInvitations(data.invitations);
+      setRequests(data.requests);
+    } catch (reason) {
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "No se pudieron cargar las invitaciones.",
+      );
+    }
+  }, [currentUser.id]);
+  useEffect(() => {
+    void reloadCollaboration();
+  }, [reloadCollaboration]);
+  useEffect(() => {
+    if (!notice && !error) return;
+    const timer = window.setTimeout(() => {
+      setNotice("");
+      setError("");
+    }, 5000);
+    return () => window.clearTimeout(timer);
+  }, [notice, error]);
+  useEffect(() => {
+    if (selectedTeam)
+      setSelectedTeam(
+        teams.find((team) => team.id === selectedTeam.id) || null,
+      );
+  }, [teams, selectedTeam?.id]);
+  useEffect(() => {
+    const token = new URLSearchParams(window.location.search).get("invite");
+    if (!token || !currentUser.id) return;
+    void acceptTeamInvitation(token)
+      .then(async () => {
+        setNotice("Invitación aceptada. Ya formas parte del equipo.");
+        window.history.replaceState({}, "", "/equipos");
+        await onRefresh();
+        await reloadCollaboration();
+      })
+      .catch((reason) =>
+        setError(
+          reason instanceof Error
+            ? reason.message
+            : "No se pudo aceptar el enlace.",
+        ),
+      );
+  }, [currentUser.id, onRefresh, reloadCollaboration]);
 
-  const userTeams = useMemo(() => teams.filter(team => team.captainId === currentUser.id || team.members.some(member => member.id === currentUser.id)), [teams, currentUser.id]);
-  const visibleTeams = activeTab === 'managed' ? userTeams.filter(team => team.captainId === currentUser.id) : activeTab === 'explore' ? teams.filter(team => !userTeams.some(mine => mine.id === team.id)) : userTeams;
-  const filteredTeams = visibleTeams.filter(team => `${team.name} ${team.tag} ${team.captainName}`.toLowerCase().includes(search.toLowerCase()));
-  const runAction = async (action: () => Promise<unknown>, success: string) => { setError(''); setNotice(''); try { await action(); setNotice(success); await onRefresh(); await reloadCollaboration(); } catch (reason) { setError(reason instanceof Error ? reason.message : 'No se pudo completar la acción.'); } };
-  const handleCreate = async (event: React.FormEvent) => { event.preventDefault(); if (isCreating) return; setIsCreating(true); try { await runAction(async () => { await onCreateTeam(teamName.trim(), teamTag.toUpperCase(), teamLogo || undefined); setShowCreateModal(false); setTeamName(''); setTeamTag(''); setTeamLogo(null); confetti({ particleCount: 40, spread: 50 }); }, 'Equipo creado correctamente.'); } finally { setIsCreating(false); } };
+  const userTeams = useMemo(
+    () =>
+      teams.filter(
+        (team) =>
+          team.captainId === currentUser.id ||
+          team.members.some((member) => member.id === currentUser.id),
+      ),
+    [teams, currentUser.id],
+  );
+  const visibleTeams =
+    activeTab === "managed"
+      ? userTeams.filter((team) => team.captainId === currentUser.id)
+      : activeTab === "explore"
+        ? teams.filter((team) => !userTeams.some((mine) => mine.id === team.id))
+        : userTeams;
+  const filteredTeams = visibleTeams.filter((team) =>
+    `${team.name} ${team.tag} ${team.captainName}`
+      .toLowerCase()
+      .includes(search.toLowerCase()),
+  );
+  const runAction = async (action: () => Promise<unknown>, success: string) => {
+    setError("");
+    setNotice("");
+    try {
+      await action();
+      setNotice(success);
+      await onRefresh();
+      await reloadCollaboration();
+    } catch (reason) {
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "No se pudo completar la acción.",
+      );
+    }
+  };
+  const handleCreate = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (isCreating) return;
+    setIsCreating(true);
+    try {
+      await runAction(async () => {
+        await onCreateTeam(
+          teamName.trim(),
+          teamTag.toUpperCase(),
+          teamLogo || undefined,
+        );
+        setShowCreateModal(false);
+        setTeamName("");
+        setTeamTag("");
+        setTeamLogo(null);
+        confetti({ particleCount: 40, spread: 50 });
+      }, "Equipo creado correctamente.");
+    } finally {
+      setIsCreating(false);
+    }
+  };
+  const confirmAction = (message: string, action: () => void) => {
+    if (window.confirm(message)) action();
+  };
 
-  return <div className="mx-auto flex w-full max-w-[1280px] flex-col gap-6 px-4 py-8 text-black md:px-8">
-    <div className="flex flex-col justify-between gap-4 border-b border-gray-200 pb-6 md:flex-row md:items-center"><div><span className="text-xs font-bold uppercase tracking-widest text-gray-500">Comunidad y escuadras</span><h1 className="text-3xl font-extrabold">Equipos y Rosters</h1><p className="mt-1 text-sm text-gray-600">Explora equipos, administra integrantes e invitaciones y reutiliza tu roster en distintos torneos.</p></div><button onClick={() => setShowCreateModal(true)} className="flex w-fit items-center gap-2 rounded-full bg-black px-5 py-3 text-xs font-bold uppercase text-white"><Plus className="h-4 w-4" />Crear equipo</button></div>
-    {(notice || error) && <div role="status" className={`flex items-center justify-between gap-3 rounded-2xl border p-3 text-xs font-semibold ${error ? 'border-red-200 bg-red-50 text-red-700' : 'border-green-200 bg-green-50 text-green-800'}`}><span>{error || notice}</span><button aria-label="Cerrar aviso" onClick={()=>{setNotice('');setError('');}} className="rounded-lg px-2 py-1 text-base leading-none hover:bg-black/5">×</button></div>}
-    <div className="flex gap-2 overflow-x-auto border-b border-gray-200 pb-3">{([['mine','Mis equipos'],['managed','Donde soy capitán'],['explore','Explorar equipos'],['invites',`Invitaciones (${invitations.length})`],['requests',`Solicitudes (${requests.length})`]] as [Tab,string][]).map(([id,label]) => <button key={id} onClick={() => setActiveTab(id)} className={`shrink-0 rounded-full px-4 py-2 text-xs font-bold ${activeTab===id?'bg-black text-white':'border border-gray-200 bg-white text-gray-600'}`}>{label}</button>)}</div>
-    {(['mine','managed','explore'] as Tab[]).includes(activeTab) && <><div className="flex items-center gap-3 rounded-2xl border bg-white p-3"><Search className="h-4 w-4 text-gray-400"/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar equipo, tag o capitán..." className="w-full bg-transparent text-xs outline-none"/></div><div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">{filteredTeams.map(team => { const captain = team.captainId===currentUser.id; const member = team.members.some(item=>item.id===currentUser.id); return <div key={team.id} className="flex flex-col gap-4 rounded-3xl border bg-white p-5 hover:border-black"><button onClick={()=>setSelectedTeam(team)} className="flex items-center gap-3 text-left"><div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl border bg-gray-50 font-black">{team.logo?<img src={team.logo} alt={`Logo de ${team.name}`} className="h-full w-full object-cover"/>:team.tag}</div><div className="min-w-0"><h3 className="truncate text-sm font-bold">{team.name}</h3><p className="truncate text-[11px] text-gray-500">Capitán: {team.captainName}</p></div></button><div className="flex items-center justify-between border-t pt-3 text-[11px]"><span className="flex items-center gap-1 text-gray-500"><Users className="h-4 w-4"/>{team.members.length} miembros</span>{captain?<button onClick={()=>setSelectedTeam(team)} className="font-bold">Administrar</button>:member?<button onClick={()=>void runAction(()=>leaveTeam(team.id),'Saliste del equipo.')} className="font-bold text-red-600">Salir</button>:<button onClick={()=>void runAction(()=>requestToJoinTeam(team.id),'Solicitud enviada al capitán.')} className="font-bold">Solicitar unirme</button>}</div></div>; })}</div>{filteredTeams.length===0&&<p className="rounded-2xl border bg-gray-50 p-8 text-center text-xs font-bold">No hay equipos en esta sección.</p>}</>}
-    {activeTab==='invites' && <div className="space-y-3">{invitations.map(invite=><div key={invite.id} className="flex items-center justify-between rounded-2xl border bg-white p-4 text-xs"><div><b>{invite.teamName}</b><p className="text-gray-500">Vence {new Date(invite.expiresAt).toLocaleDateString('es-MX')}</p></div><div className="flex gap-2"><button onClick={()=>void runAction(()=>acceptTeamInvitation(invite.token),'Invitación aceptada.')} className="rounded-full bg-black px-4 py-2 font-bold text-white">Aceptar</button><button onClick={()=>void runAction(()=>rejectTeamInvitation(invite.id),'Invitación rechazada.')} className="rounded-full border px-4 py-2 font-bold">Rechazar</button></div></div>)}{invitations.length===0&&<p className="rounded-2xl border bg-gray-50 p-8 text-center text-xs font-bold">No tienes invitaciones pendientes.</p>}</div>}
-    {activeTab==='requests' && <div className="space-y-3">{requests.map(request=><div key={request.id} className="flex items-center justify-between rounded-2xl border bg-white p-4 text-xs"><div><b>{request.gamerTag||request.userName}</b><p className="text-gray-500">Quiere unirse a {request.teamName}</p></div><div className="flex gap-2"><button onClick={()=>void runAction(()=>respondTeamJoinRequest(request.id,true),'Jugador agregado.')} className="rounded-full bg-black px-4 py-2 font-bold text-white">Aceptar</button><button onClick={()=>void runAction(()=>respondTeamJoinRequest(request.id,false),'Solicitud rechazada.')} className="rounded-full border px-4 py-2 font-bold">Rechazar</button></div></div>)}{requests.length===0&&<p className="rounded-2xl border bg-gray-50 p-8 text-center text-xs font-bold">No tienes solicitudes pendientes.</p>}</div>}
+  return (
+    <div className="mx-auto flex w-full max-w-[1280px] flex-col gap-6 px-4 py-8 text-black md:px-8">
+      <div className="flex flex-col justify-between gap-4 border-b border-gray-200 pb-6 md:flex-row md:items-center">
+        <div>
+          <span className="text-xs font-bold uppercase tracking-widest text-gray-500">
+            Comunidad y escuadras
+          </span>
+          <h1 className="text-3xl font-extrabold">Equipos y Rosters</h1>
+          <p className="mt-1 text-sm text-gray-600">
+            Explora equipos, administra integrantes e invitaciones y reutiliza
+            tu roster en distintos torneos.
+          </p>
+        </div>
+        <button
+          onClick={() => setShowCreateModal(true)}
+          className="flex w-fit items-center gap-2 rounded-full bg-black px-5 py-3 text-xs font-bold uppercase text-white"
+        >
+          <Plus className="h-4 w-4" />
+          Crear equipo
+        </button>
+      </div>
+      {(notice || error) && (
+        <div
+          role="status"
+          className={`flex items-center justify-between gap-3 rounded-2xl border p-3 text-xs font-semibold ${error ? "border-red-200 bg-red-50 text-red-700" : "border-green-200 bg-green-50 text-green-800"}`}
+        >
+          <span>{error || notice}</span>
+          <button
+            aria-label="Cerrar aviso"
+            onClick={() => {
+              setNotice("");
+              setError("");
+            }}
+            className="rounded-lg px-2 py-1 text-base leading-none hover:bg-black/5"
+          >
+            ×
+          </button>
+        </div>
+      )}
+      <div className="flex gap-2 overflow-x-auto border-b border-gray-200 pb-3">
+        {(
+          [
+            ["mine", "Mis equipos"],
+            ["managed", "Donde soy capitán"],
+            ["explore", "Explorar equipos"],
+            ["invites", `Invitaciones (${invitations.length})`],
+            ["requests", `Solicitudes (${requests.length})`],
+          ] as [Tab, string][]
+        ).map(([id, label]) => (
+          <button
+            key={id}
+            onClick={() => setActiveTab(id)}
+            className={`shrink-0 rounded-full px-4 py-2 text-xs font-bold ${activeTab === id ? "bg-black text-white" : "border border-gray-200 bg-white text-gray-600"}`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      {(["mine", "managed", "explore"] as Tab[]).includes(activeTab) && (
+        <>
+          <div className="flex items-center gap-3 rounded-2xl border bg-white p-3">
+            <Search className="h-4 w-4 text-gray-400" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Buscar equipo, tag o capitán..."
+              className="w-full bg-transparent text-xs outline-none"
+            />
+          </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {filteredTeams.map((team) => {
+              const captain = team.captainId === currentUser.id;
+              const member = team.members.some(
+                (item) => item.id === currentUser.id,
+              );
+              return (
+                <div
+                  key={team.id}
+                  className="flex flex-col gap-4 rounded-3xl border bg-white p-5 hover:border-black"
+                >
+                  <button
+                    onClick={() => setSelectedTeam(team)}
+                    className="flex items-center gap-3 text-left"
+                  >
+                    <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl border bg-gray-50 font-black">
+                      {team.logo ? (
+                        <img
+                          src={team.logo}
+                          alt={`Logo de ${team.name}`}
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        team.tag
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <h3 className="truncate text-sm font-bold">
+                        {team.name}
+                      </h3>
+                      <p className="truncate text-[11px] text-gray-500">
+                        Capitán: {team.captainName}
+                      </p>
+                    </div>
+                  </button>
+                  <div className="flex items-center justify-between border-t pt-3 text-[11px]">
+                    <span className="flex items-center gap-1 text-gray-500">
+                      <Users className="h-4 w-4" />
+                      {team.members.length} miembros
+                    </span>
+                    {captain ? (
+                      <button
+                        onClick={() => setSelectedTeam(team)}
+                        className="font-bold"
+                      >
+                        Administrar
+                      </button>
+                    ) : member ? (
+                      <button
+                        onClick={() =>
+                          confirmAction(
+                            `¿Seguro que quieres abandonar ${team.name}?`,
+                            () => void runAction(() => leaveTeam(team.id), "Saliste del equipo."),
+                          )
+                        }
+                        className="font-bold text-red-600"
+                      >
+                        Salir
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() =>
+                          void runAction(
+                            () => requestToJoinTeam(team.id),
+                            "Solicitud enviada al capitán.",
+                          )
+                        }
+                        className="font-bold"
+                      >
+                        Solicitar unirme
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          {filteredTeams.length === 0 && (
+            <p className="rounded-2xl border bg-gray-50 p-8 text-center text-xs font-bold">
+              No hay equipos en esta sección.
+            </p>
+          )}
+        </>
+      )}
+      {activeTab === "invites" && (
+        <div className="space-y-3">
+          {invitations.map((invite) => (
+            <div
+              key={invite.id}
+              className="flex items-center justify-between rounded-2xl border bg-white p-4 text-xs"
+            >
+              <div>
+                <b>{invite.teamName}</b>
+                <p className="text-gray-500">
+                  Vence {new Date(invite.expiresAt).toLocaleDateString("es-MX")}
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() =>
+                    void runAction(
+                      () => acceptTeamInvitation(invite.token),
+                      "Invitación aceptada.",
+                    )
+                  }
+                  className="rounded-full bg-black px-4 py-2 font-bold text-white"
+                >
+                  Aceptar
+                </button>
+                <button
+                  onClick={() =>
+                    confirmAction(
+                      `¿Seguro que quieres rechazar la invitación de ${invite.teamName}?`,
+                      () =>
+                        void runAction(
+                          () => rejectTeamInvitation(invite.id),
+                          "Invitación rechazada.",
+                        ),
+                    )
+                  }
+                  className="rounded-full border px-4 py-2 font-bold"
+                >
+                  Rechazar
+                </button>
+              </div>
+            </div>
+          ))}
+          {invitations.length === 0 && (
+            <p className="rounded-2xl border bg-gray-50 p-8 text-center text-xs font-bold">
+              No tienes invitaciones pendientes.
+            </p>
+          )}
+        </div>
+      )}
+      {activeTab === "requests" && (
+        <div className="space-y-3">
+          {requests.map((request) => (
+            <div
+              key={request.id}
+              className="flex items-center justify-between rounded-2xl border bg-white p-4 text-xs"
+            >
+              <div>
+                <b>{request.gamerTag || request.userName}</b>
+                <p className="text-gray-500">
+                  Quiere unirse a {request.teamName}
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() =>
+                    void runAction(
+                      () => respondTeamJoinRequest(request.id, true),
+                      "Jugador agregado.",
+                    )
+                  }
+                  className="rounded-full bg-black px-4 py-2 font-bold text-white"
+                >
+                  Aceptar
+                </button>
+                <button
+                  onClick={() =>
+                    confirmAction(
+                      `¿Seguro que quieres rechazar a ${request.gamerTag || request.userName}?`,
+                      () =>
+                        void runAction(
+                          () => respondTeamJoinRequest(request.id, false),
+                          "Solicitud rechazada.",
+                        ),
+                    )
+                  }
+                  className="rounded-full border px-4 py-2 font-bold"
+                >
+                  Rechazar
+                </button>
+              </div>
+            </div>
+          ))}
+          {requests.length === 0 && (
+            <p className="rounded-2xl border bg-gray-50 p-8 text-center text-xs font-bold">
+              No tienes solicitudes pendientes.
+            </p>
+          )}
+        </div>
+      )}
 
-    {selectedTeam && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"><div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-3xl bg-white p-6"><button onClick={()=>setSelectedTeam(null)} className="float-right text-xl">×</button><h2 className="text-xl font-black">{selectedTeam.name}</h2><p className="text-xs text-gray-500">Capitán: {selectedTeam.captainName}</p><h3 className="mt-6 text-xs font-black uppercase">Miembros</h3><div className="mt-2 space-y-2">{selectedTeam.members.map(member=><div key={member.id} className="flex items-center justify-between rounded-xl bg-gray-50 p-3 text-xs"><div><b>{member.gamerTag||member.name}</b><p className="text-gray-500">{member.role==='captain'?'Capitán':member.name}</p></div>{selectedTeam.captainId===currentUser.id&&member.id!==currentUser.id&&<button onClick={()=>void runAction(()=>removeTeamMember(selectedTeam.id,member.id),'Miembro retirado del equipo.')} title="Retirar miembro" className="text-red-600"><Trash2 className="h-4 w-4"/></button>}</div>)}</div>{selectedTeam.captainId===currentUser.id?<div className="mt-6 space-y-3 border-t pt-5"><h3 className="text-xs font-black uppercase">Invitar miembro</h3><div className="flex gap-2"><input value={inviteQuery} onChange={e=>setInviteQuery(e.target.value)} placeholder="GamerTag o correo exacto" className="min-w-0 flex-1 rounded-xl border p-3 text-xs"/><button onClick={()=>void runAction(()=>inviteTeamMember(selectedTeam.id,inviteQuery),'Invitación enviada.')} className="rounded-xl bg-black px-4 text-white"><UserPlus className="h-4 w-4"/></button></div><button onClick={()=>void runAction(async()=>{const token=await createTeamInviteLink(selectedTeam.id);await navigator.clipboard.writeText(`${window.location.origin}/equipos?invite=${token}`);},'Enlace copiado. Vence en 7 días.')} className="flex w-full items-center justify-center gap-2 rounded-xl border p-3 text-xs font-bold"><Copy className="h-4 w-4"/>Copiar enlace de invitación</button></div>:selectedTeam.members.some(member=>member.id===currentUser.id)?<button onClick={()=>void runAction(()=>leaveTeam(selectedTeam.id),'Saliste del equipo.')} className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl border border-red-200 p-3 text-xs font-bold text-red-700"><LogOut className="h-4 w-4"/>Abandonar equipo</button>:<button onClick={()=>void runAction(()=>requestToJoinTeam(selectedTeam.id),'Solicitud enviada al capitán.')} className="mt-6 w-full rounded-xl bg-black p-3 text-xs font-bold text-white">Solicitar unirme</button>}</div></div>}
-    {showCreateModal&&<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"><div className="w-full max-w-md rounded-3xl bg-white p-6"><button disabled={isCreating} onClick={()=>setShowCreateModal(false)} className="float-right text-xl disabled:opacity-40">×</button><h3 className="text-lg font-black">Crear equipo reutilizable</h3><form onSubmit={handleCreate} className="mt-5 space-y-4 text-xs"><input required minLength={2} maxLength={40} disabled={isCreating} value={teamName} onChange={e=>setTeamName(e.target.value)} placeholder="Nombre único del equipo" className="w-full rounded-xl border p-3"/><input required minLength={2} maxLength={5} disabled={isCreating} value={teamTag} onChange={e=>setTeamTag(e.target.value.replace(/[^a-zA-Z0-9]/g,'').toUpperCase())} placeholder="Tag único (2-5 caracteres)" className="w-full rounded-xl border p-3 uppercase"/><label className="block cursor-pointer rounded-xl border border-dashed p-3">{teamLogo?teamLogo.name:'Logo opcional · JPG, PNG o WebP · máximo 2 MB'}<input disabled={isCreating} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={e=>setTeamLogo(e.target.files?.[0]||null)}/></label><p className="rounded-xl bg-gray-100 p-3"><b>Capitán:</b> {currentUser.gamerTag||currentUser.name} (tú)</p><button disabled={isCreating} className="w-full rounded-full bg-black py-3 font-bold text-white disabled:cursor-not-allowed disabled:opacity-50">{isCreating?'Creando equipo…':'Crear equipo'}</button></form></div></div>}
-  </div>;
+      {selectedTeam && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-3xl bg-white p-6">
+            <button
+              onClick={() => setSelectedTeam(null)}
+              className="float-right text-xl"
+            >
+              ×
+            </button>
+            <h2 className="text-xl font-black">{selectedTeam.name}</h2>
+            <p className="text-xs text-gray-500">
+              Capitán: {selectedTeam.captainName}
+            </p>
+            <h3 className="mt-6 text-xs font-black uppercase">Miembros</h3>
+            <div className="mt-2 space-y-2">
+              {selectedTeam.members.map((member) => (
+                <div
+                  key={member.id}
+                  className="flex items-center justify-between rounded-xl bg-gray-50 p-3 text-xs"
+                >
+                  <div>
+                    <b>{member.gamerTag || member.name}</b>
+                    <p className="text-gray-500">
+                      {member.role === "captain" ? "Capitán" : member.name}
+                    </p>
+                  </div>
+                  {selectedTeam.captainId === currentUser.id &&
+                    member.id !== currentUser.id && (
+                      <button
+                        onClick={() =>
+                          confirmAction(
+                            `¿Seguro que quieres retirar a ${member.gamerTag || member.name} del equipo?`,
+                            () => void runAction(
+                              () => removeTeamMember(selectedTeam.id, member.id),
+                              `${member.gamerTag || member.name} fue retirado del equipo.`,
+                            ),
+                          )
+                        }
+                        title="Retirar miembro"
+                        className="text-red-600"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    )}
+                </div>
+              ))}
+            </div>
+            {selectedTeam.captainId === currentUser.id ? (
+              <div className="mt-6 space-y-3 border-t pt-5">
+                <div className="flex items-center justify-between gap-3">
+                  <h3 className="text-xs font-black uppercase">Invitar miembro</h3>
+                  <button
+                    onClick={() => confirmAction(
+                      `¿Eliminar el equipo ${selectedTeam.name}? Esta acción no se puede deshacer.`,
+                      () => void runAction(async () => { await archiveTeam(selectedTeam.id); setSelectedTeam(null); }, "Equipo eliminado correctamente."),
+                    )}
+                    className="flex items-center gap-1 text-xs font-bold text-red-600"
+                  ><Trash2 className="h-4 w-4" />Eliminar equipo</button>
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    value={inviteQuery}
+                    onChange={(e) => setInviteQuery(e.target.value)}
+                    placeholder="GamerTag o correo exacto"
+                    className="min-w-0 flex-1 rounded-xl border p-3 text-xs"
+                  />
+                  <button
+                    onClick={() =>
+                      void runAction(
+                        () => inviteTeamMember(selectedTeam.id, inviteQuery),
+                        "Invitación enviada.",
+                      )
+                    }
+                    className="rounded-xl bg-black px-4 text-white"
+                  >
+                    <UserPlus className="h-4 w-4" />
+                  </button>
+                </div>
+                <button
+                  onClick={() =>
+                    void runAction(async () => {
+                      const token = await createTeamInviteLink(selectedTeam.id);
+                      await navigator.clipboard.writeText(
+                        `${window.location.origin}/equipos?invite=${token}`,
+                      );
+                    }, "Enlace copiado. Vence en 7 días.")
+                  }
+                  className="flex w-full items-center justify-center gap-2 rounded-xl border p-3 text-xs font-bold"
+                >
+                  <Copy className="h-4 w-4" />
+                  Copiar enlace de invitación
+                </button>
+              </div>
+            ) : selectedTeam.members.some(
+                (member) => member.id === currentUser.id,
+              ) ? (
+              <button
+                onClick={() => confirmAction(
+                  `¿Seguro que quieres abandonar ${selectedTeam.name}?`,
+                  () => void runAction(() => leaveTeam(selectedTeam.id), "Saliste del equipo."),
+                )}
+                className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl border border-red-200 p-3 text-xs font-bold text-red-700"
+              >
+                <LogOut className="h-4 w-4" />
+                Abandonar equipo
+              </button>
+            ) : (
+              <button
+                onClick={() =>
+                  void runAction(
+                    () => requestToJoinTeam(selectedTeam.id),
+                    "Solicitud enviada al capitán.",
+                  )
+                }
+                className="mt-6 w-full rounded-xl bg-black p-3 text-xs font-bold text-white"
+              >
+                Solicitar unirme
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+      {showCreateModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="w-full max-w-md rounded-3xl bg-white p-6">
+            <button
+              disabled={isCreating}
+              onClick={() => setShowCreateModal(false)}
+              className="float-right text-xl disabled:opacity-40"
+            >
+              ×
+            </button>
+            <h3 className="text-lg font-black">Crear equipo reutilizable</h3>
+            <form onSubmit={handleCreate} className="mt-5 space-y-4 text-xs">
+              <input
+                required
+                minLength={2}
+                maxLength={40}
+                disabled={isCreating}
+                value={teamName}
+                onChange={(e) => setTeamName(e.target.value)}
+                placeholder="Nombre único del equipo"
+                className="w-full rounded-xl border p-3"
+              />
+              <input
+                required
+                minLength={2}
+                maxLength={5}
+                disabled={isCreating}
+                value={teamTag}
+                onChange={(e) =>
+                  setTeamTag(
+                    e.target.value.replace(/[^a-zA-Z0-9]/g, "").toUpperCase(),
+                  )
+                }
+                placeholder="Tag único (2-5 caracteres)"
+                className="w-full rounded-xl border p-3 uppercase"
+              />
+              <label className="block cursor-pointer rounded-xl border border-dashed p-3">
+                {teamLogo
+                  ? teamLogo.name
+                  : "Logo opcional · JPG, PNG o WebP · máximo 2 MB"}
+                <input
+                  disabled={isCreating}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  className="hidden"
+                  onChange={(e) => setTeamLogo(e.target.files?.[0] || null)}
+                />
+              </label>
+              <p className="rounded-xl bg-gray-100 p-3">
+                <b>Capitán:</b> {currentUser.gamerTag || currentUser.name} (tú)
+              </p>
+              <button
+                disabled={isCreating}
+                className="w-full rounded-full bg-black py-3 font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isCreating ? "Creando equipo…" : "Crear equipo"}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 };
