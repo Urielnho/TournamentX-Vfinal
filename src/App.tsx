@@ -14,7 +14,7 @@ import { AdminDashboardView } from './components/AdminDashboardView';
 import { AuthModal } from './components/AuthModal';
 import { OrganizerFundingPayment } from './components/OrganizerFundingPayment';
 import { supabase } from './lib/supabase';
-import { cancelTournamentRegistration, clearTournamentBracket, createRegistrationPaymentIntent, generateTournamentBracket, insertRegistration, insertTeam, insertTournament, loadAppData, updateMatchSchedule, updateTournamentSettings, uploadTeamLogo, waitForRegistrationPayment } from './services/supabaseData';
+import { cancelTournamentRegistration, clearTournamentBracket, createRegistrationPaymentIntent, flushEmailOutbox, generateTournamentBracket, insertRegistration, insertTeam, insertTournament, loadAppData, updateMatchSchedule, updateTournamentSettings, uploadTeamLogo, waitForRegistrationPayment } from './services/supabaseData';
 
 const EMPTY_PROFILE: UserProfile = {
   id: '', name: 'Visitante', gamerTag: 'Visitante', globalRole: 'user', rank: 'Sin clasificación', level: 0,
@@ -92,11 +92,11 @@ export default function App() {
       setDataError('Supabase no está configurado.');
       return;
     }
-    supabase.auth.getSession().then(({ data }) => { setAuthUser(data.session?.user ?? null); setAuthInitialized(true); });
+    supabase.auth.getSession().then(({ data }) => { setAuthUser(data.session?.user ?? null); setAuthInitialized(true); if (data.session?.user) void flushEmailOutbox(); });
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       setAuthUser(session?.user ?? null);
       setAuthInitialized(true);
-      if (session?.user) setShowAuthModal(false);
+      if (session?.user) { setShowAuthModal(false); void flushEmailOutbox(); }
     });
     return () => listener.subscription.unsubscribe();
   }, []);
