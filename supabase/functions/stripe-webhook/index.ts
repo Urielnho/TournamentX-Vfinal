@@ -72,7 +72,7 @@ async function completeCheckout(admin: any, session: any, stripeSecret: string) 
     stripe_charge_id: chargeId,
   }).eq('stripe_checkout_session_id', session.id);
 
-  await admin.from('registrations').update({ status: 'confirmed', payment_status: 'paid', stripe_payment_intent_id: session.payment_intent || null, paid_at: new Date().toISOString() }).eq('id', registrationId);
+  await admin.from('registrations').update({ status: 'confirmed', payment_status: 'paid', stripe_payment_intent_id: session.payment_intent || null, paid_at: new Date().toISOString() }).eq('id', registrationId).neq('status', 'cancelled');
   await admin.from('tournaments').update({ has_received_payments: true }).eq('id', tournamentId);
 }
 
@@ -131,6 +131,6 @@ async function completeRegistrationIntent(admin: any, paymentIntent: any, stripe
   const stripeFeeMinor = Number(typeof intent.latest_charge === 'object' ? intent.latest_charge?.balance_transaction?.fee || 0 : 0);
   const grossMinor = Number(intent.amount_received || intent.amount || 0);
   await admin.from('transactions').update({ status: 'PAID', amount: grossMinor / 100, amount_minor: grossMinor, stripe_fee_minor: stripeFeeMinor, net_amount_minor: Math.max(grossMinor - stripeFeeMinor, 0), stripe_charge_id: chargeId }).eq('stripe_payment_intent_id', intent.id).eq('fee_type', 'entry_fee');
-  await admin.from('registrations').update({ status: 'confirmed', payment_status: 'paid', paid_at: new Date().toISOString() }).eq('id', registrationId).eq('stripe_payment_intent_id', intent.id);
+  await admin.from('registrations').update({ status: 'confirmed', payment_status: 'paid', paid_at: new Date().toISOString() }).eq('id', registrationId).eq('stripe_payment_intent_id', intent.id).neq('status', 'cancelled');
   await admin.from('tournaments').update({ has_received_payments: true }).eq('id', tournamentId);
 }

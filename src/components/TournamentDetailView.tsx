@@ -43,6 +43,7 @@ interface TournamentDetailViewProps {
   currentUser: UserProfile;
   onNavigate: (view: ViewMode, tournamentId?: string) => void;
   onRegister: (tournamentId: string, teamName: string, ign: string, type: 'team' | 'individual', teamId?: string, logoFile?: File, memberIds?: string[]) => Promise<'payment_pending' | 'confirmed'>;
+  onLeaveRegistration: (tournamentId: string) => Promise<{ refunded: boolean }>;
 }
 
 export const TournamentDetailView: React.FC<TournamentDetailViewProps> = ({
@@ -52,7 +53,8 @@ export const TournamentDetailView: React.FC<TournamentDetailViewProps> = ({
   teams,
   currentUser,
   onNavigate,
-  onRegister
+  onRegister,
+  onLeaveRegistration
 }) => {
   const [activeTab, setActiveTab] = useState<'resumen' | 'bracket' | 'partidos' | 'participantes' | 'reglas' | 'premios'>('resumen');
   const [copiedLink, setCopiedLink] = useState(false);
@@ -68,6 +70,19 @@ export const TournamentDetailView: React.FC<TournamentDetailViewProps> = ({
   const [loadingRoster, setLoadingRoster] = useState(false);
   const [registrationSuccess, setRegistrationSuccess] = useState(false);
   const [registrationError, setRegistrationError] = useState('');
+  const [leavingTournament, setLeavingTournament] = useState(false);
+  const [leaveMessage, setLeaveMessage] = useState('');
+
+  const handleLeaveTournament = async () => {
+    if (!window.confirm('¿Seguro que quieres salir de este torneo? Si pagaste, se solicitará el reembolso en Stripe.')) return;
+    setLeavingTournament(true);
+    setLeaveMessage('');
+    try {
+      const result = await onLeaveRegistration(tournament.id);
+      setLeaveMessage(result.refunded ? 'Saliste del torneo y Stripe procesó el reembolso.' : 'Saliste del torneo correctamente.');
+    } catch (error) { setLeaveMessage(error instanceof Error ? error.message : 'No se pudo cancelar la inscripción.'); }
+    finally { setLeavingTournament(false); }
+  };
 
   const handleConfirmRegistration = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -167,6 +182,12 @@ export const TournamentDetailView: React.FC<TournamentDetailViewProps> = ({
               >
                 <Shield className="h-4 w-4" />
                 Administrar torneo
+              </button> : tournament.isUserRegistered ? <button
+                onClick={() => void handleLeaveTournament()}
+                disabled={leavingTournament}
+                className="rounded-full border border-red-400 bg-transparent px-6 py-2.5 text-xs font-black uppercase tracking-wider text-red-300 transition hover:bg-red-950 disabled:opacity-50"
+              >
+                {leavingTournament ? 'Saliendo…' : 'Salir del torneo'}
               </button> : registrationOpen ? <button
                 onClick={() => {
                   setRegType(tournament.participantType);
@@ -274,7 +295,8 @@ export const TournamentDetailView: React.FC<TournamentDetailViewProps> = ({
             <div className="flex flex-col gap-6">
               <div className="bg-white p-6 rounded-3xl border border-[#E5E7EB] space-y-4 shadow-xs">
                 <h3 className="text-base font-extrabold text-black">{tournament.isUserOrganizing ? 'Gestión del torneo' : 'Registro Inmediato'}</h3>
-                {tournament.isUserOrganizing ? <p className="text-xs text-gray-600">Como organizador administras esta competencia y no puedes inscribirte como participante. Usa el botón “Administrar torneo” de la parte superior para gestionar la competencia.</p> : registrationOpen ? <>
+                {leaveMessage && <p className="rounded-xl border border-gray-200 bg-gray-50 p-3 text-xs font-semibold">{leaveMessage}</p>}
+                {tournament.isUserOrganizing ? <p className="text-xs text-gray-600">Como organizador administras esta competencia y no puedes inscribirte como participante. Usa el botón “Administrar torneo” de la parte superior para gestionar la competencia.</p> : tournament.isUserRegistered ? <><p className="text-xs text-gray-600">Tu inscripción está activa. Puedes salir antes de que comience el torneo.</p><button onClick={() => void handleLeaveTournament()} disabled={leavingTournament} className="w-full rounded-full border border-red-300 py-3 text-xs font-bold text-red-700 hover:bg-red-50 disabled:opacity-50">{leavingTournament ? 'Procesando…' : 'Salir del torneo'}</button></> : registrationOpen ? <>
                 <p className="text-xs text-gray-600">{tournament.participantType === 'individual' ? 'Regístrate como jugador individual.' : 'Inscribe al equipo del que eres capitán.'}</p>
                 {tournament.participantType === 'team' && <button
                   onClick={() => {

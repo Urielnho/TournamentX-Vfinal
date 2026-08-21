@@ -378,3 +378,14 @@ export async function waitForRegistrationPayment(paymentIntentId: string) {
   }
   throw new Error('El pago sigue en validación. Actualiza en unos momentos.');
 }
+
+export async function cancelTournamentRegistration(tournamentId: string): Promise<{ refunded: boolean }> {
+  if (!supabase) throw new Error('Supabase no está configurado.');
+  const { data, error } = await supabase.functions.invoke('cancel-registration', { body: { tournamentId } });
+  if (error) {
+    let message = error.message;
+    try { const payload = await (error as { context?: Response }).context?.clone().json(); if (payload?.error) message = payload.error; } catch { /* response was not JSON */ }
+    throw new Error(message);
+  }
+  return { refunded: Boolean(data?.refunded) };
+}

@@ -244,7 +244,8 @@ export const CreateTournamentWizard: React.FC<CreateTournamentWizardProps> = ({
       confetti({ particleCount: 80, spread: 70, origin: { y: 0.5 } });
       onNavigate('tournament-detail', savedTournament.id);
     } catch (error) {
-      setFormError(error instanceof Error ? error.message : 'No se pudo publicar el torneo.');
+      const message = error instanceof Error ? error.message : (error && typeof error === 'object' && 'message' in error ? String(error.message) : 'No se pudo publicar el torneo.');
+      setFormError(message);
     } finally {
       setIsPublishing(false);
     }
@@ -633,7 +634,7 @@ export const CreateTournamentWizard: React.FC<CreateTournamentWizardProps> = ({
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-[#E5E7EB]">
+            <div className="grid grid-cols-1 gap-4 pt-4 border-t border-[#E5E7EB]">
               <div className="space-y-1.5">
                 <label className="text-xs font-bold text-black uppercase">Cupo Máximo</label>
                 <input
@@ -650,19 +651,6 @@ export const CreateTournamentWizard: React.FC<CreateTournamentWizardProps> = ({
                 {maxParticipants % 2 !== 0 && <p className="text-[11px] text-gray-600">Cupo impar: la llave necesitará un BYE o un ajuste manual.</p>}
               </div>
 
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-black uppercase">Modalidad</label>
-                <select
-                  value={participantType}
-                  onChange={(e) => setParticipantType(e.target.value as 'individual' | 'team')}
-                  disabled={selectedGameId === 'mortalkombat'}
-                  className="w-full bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl p-3 text-xs text-black outline-none font-bold"
-                >
-                  <option value="team">Por Equipos (Squad / Team)</option>
-                  <option value="individual">Individual (1v1 / Solo)</option>
-                </select>
-                {selectedGameId === 'mortalkombat' && <p className="text-[11px] text-gray-500">MK1 siempre se registra como individual 1v1.</p>}
-              </div>
             </div>
 
             <div className="space-y-2 pt-4 border-t border-[#E5E7EB]">

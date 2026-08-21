@@ -14,7 +14,7 @@ import { AdminDashboardView } from './components/AdminDashboardView';
 import { AuthModal } from './components/AuthModal';
 import { OrganizerFundingPayment } from './components/OrganizerFundingPayment';
 import { supabase } from './lib/supabase';
-import { createRegistrationPaymentIntent, insertRegistration, insertTeam, insertTournament, loadAppData, updateTournamentSettings, uploadTeamLogo, waitForRegistrationPayment } from './services/supabaseData';
+import { cancelTournamentRegistration, createRegistrationPaymentIntent, insertRegistration, insertTeam, insertTournament, loadAppData, updateTournamentSettings, uploadTeamLogo, waitForRegistrationPayment } from './services/supabaseData';
 
 const EMPTY_PROFILE: UserProfile = {
   id: '', name: 'Visitante', gamerTag: 'Visitante', globalRole: 'user', rank: 'Sin clasificación', level: 0,
@@ -211,6 +211,12 @@ export default function App() {
     await refreshData(authUser?.id);
   };
 
+  const handleLeaveRegistration = async (tournamentId: string) => {
+    const result = await cancelTournamentRegistration(tournamentId);
+    await refreshData(authUser?.id);
+    return result;
+  };
+
   const handleCreateTeam = async (name: string, tag: string, logoFile?: File) => {
     if (!authUser) { setShowAuthModal(true); throw new Error('Inicia sesión para crear un equipo.'); }
     const logoUrl = logoFile ? await uploadTeamLogo(logoFile) : undefined;
@@ -257,7 +263,7 @@ export default function App() {
       {loadingData && <div className="mx-auto max-w-4xl px-6 py-4 text-center text-xs font-bold text-gray-500">Cargando datos de TournamentX…</div>}
       {currentView === 'home' && <HomeView tournaments={tournaments} onNavigate={handleNavigate} />}
       {currentView === 'tournaments' && <ExploreTournamentsView tournaments={tournaments} onNavigate={handleNavigate} searchQuery={globalSearchQuery} onSearchQueryChange={setGlobalSearchQuery} />}
-      {currentView === 'tournament-detail' && (currentTournament ? <TournamentDetailView tournament={currentTournament} matches={matches} participants={currentParticipants} teams={teams} currentUser={userProfile} onNavigate={handleNavigate} onRegister={handleRegister} /> : <EmptyState message="Este torneo no existe o ya no está disponible." onBack={() => handleNavigate('tournaments')} />)}
+      {currentView === 'tournament-detail' && (currentTournament ? <TournamentDetailView tournament={currentTournament} matches={matches} participants={currentParticipants} teams={teams} currentUser={userProfile} onNavigate={handleNavigate} onRegister={handleRegister} onLeaveRegistration={handleLeaveRegistration} /> : <EmptyState message="Este torneo no existe o ya no está disponible." onBack={() => handleNavigate('tournaments')} />)}
       {currentView === 'create-tournament' && authUser && <CreateTournamentWizard onTournamentCreated={handleTournamentCreated} onTournamentPublished={async tournamentId => { await refreshData(authUser.id); setSelectedTournamentId(tournamentId); }} onNavigate={handleNavigate} />}
       {currentView === 'organizer-dashboard' && currentTournament?.isUserOrganizing && <OrganizerDashboardView activeTournamentId={currentTournament.id} activeSection={organizerSection} transactions={transactions.filter(transaction => transaction.tournamentId === currentTournament.id)} pendingApprovals={pendingApprovals.filter(item => item.tournamentId === currentTournament.id)} tournaments={tournaments.filter(t => t.isUserOrganizing)} matches={matches.filter(match => match.tournamentId === currentTournament.id)} participants={currentParticipants} onNavigate={handleNavigate} onSectionChange={section => handleNavigate('organizer-dashboard', currentTournament.id, section)} onApproveTeam={id => void approveTeam(id)} onRejectTeam={id => void rejectTeam(id)} onUpdateMatchScore={(id, a, b) => void updateScore(id, a, b)} onUpdateTournamentSettings={saveTournamentSettings} />}
       {currentView === 'profile' && authUser && <ProfileAthleteView user={userProfile} onUpdateUser={profile => void updateProfile(profile)} onNavigate={handleNavigate} />}
