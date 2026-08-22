@@ -1,4 +1,4 @@
-import { Tournament, UserProfile, Transaction, PendingApproval, Match, Participant, Team, AdminDisputeTicket } from '../types';
+import { Tournament, UserProfile, Transaction, PendingApproval, Match, Participant, Team, AdminDisputeTicket, TournamentCategory, TournamentFormat } from '../types';
 
 export const INITIAL_USER_PROFILE: UserProfile = {
   id: 'usr-apex-01',
@@ -124,17 +124,61 @@ export const INITIAL_REGISTERED_USERS = [
   { id: 'usr-viper-05', name: 'Valeria Ramos', gamerTag: 'NeonViper', email: 'valeria@neonknights.gg', role: 'user', status: 'active', tournamentsJoined: 18, createdAt: '2024-04-12' }
 ];
 
-export const GAMES_CATALOG = [
+export interface GameModeConfig {
+  label: string;
+  formats: TournamentFormat[];
+  participantType: 'individual' | 'team';
+  minPlayersPerTeam: number;
+}
+
+export interface GameCatalogEntry {
+  id: string;
+  name: string;
+  formatLabel: string;
+  category: TournamentCategory;
+  supportsCustomRoster: boolean;
+  imageUrl: string;
+  modes: GameModeConfig[];
+  defaultRules: string[];
+}
+
+export const TOURNAMENT_FORMAT_LABELS: Partial<Record<TournamentFormat, string>> = {
+  single_elim: 'Eliminación directa (Single Elimination)',
+  double_elim: 'Doble eliminación (Double Elimination)',
+  group_stage: 'Fase de grupos',
+  groups_elim: 'Fase de grupos + eliminación',
+  round_robin: 'Todos contra todos (Round Robin)',
+  league: 'Liga por puntos',
+  battle_royale: 'Battle Royale',
+};
+
+export const TOURNAMENT_REGIONS = [
+  'Norteamérica',
+  'México y Centroamérica',
+  'Sudamérica',
+  'Europa',
+  'Medio Oriente y África',
+  'Asia',
+  'Oceanía',
+  'Global / Multirregión',
+] as const;
+
+const TEAM_FORMATS: TournamentFormat[] = ['single_elim', 'double_elim', 'group_stage', 'groups_elim', 'round_robin', 'league'];
+const RACKET_SPORT_FORMATS: TournamentFormat[] = ['single_elim', 'double_elim', 'round_robin', 'group_stage', 'groups_elim', 'league'];
+const FIGHTING_GAME_FORMATS: TournamentFormat[] = ['double_elim', 'single_elim'];
+
+export const GAMES_CATALOG: GameCatalogEntry[] = [
   // ESPORTS (7 juegos especificados)
   {
     id: 'lol',
     name: 'League of Legends',
     formatLabel: 'En equipos (5v5)',
     category: 'esports',
-    minPlayers: 5,
     supportsCustomRoster: true,
     imageUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuBZMWz8mHk4syJY5PyUraVmTg5i33Vm_IT_sE7cAQAGV_wX7aygusg2k1UOG2vW73LlSooAUjO53CFkZrmTnxaimVEzLtYBUhKBDHQP7nFdcIfzeoK-ZVCwb2DrHMRz5zN0kD14aI_KJkEeoF8NmcWHvNM5-aylhWrsW5gIcOXC7hLn8vR8ry_nGtuTLwlarRLVre_XRdqs3kLIy5VNADL8JDts7qjFgDmpz7ULwCbqtiClyDKW-e10',
-    modes: ["Equipos de 5 jugadores mínimo", "5v5 Summoner's Rift Tournament Draft", "5v5 ARAM Competitivo"],
+    modes: [
+      { label: '5 vs 5', formats: TEAM_FORMATS, participantType: 'team', minPlayersPerTeam: 5 },
+    ],
     defaultRules: [
       "Torneo en modo Draft de Torneo oficial.",
       "Pausa técnica máxima de 10 minutos por equipo.",
@@ -147,10 +191,13 @@ export const GAMES_CATALOG = [
     name: 'Fortnite',
     formatLabel: '1 vs 1, Dúos o en equipos',
     category: 'esports',
-    minPlayers: 1,
     supportsCustomRoster: true,
     imageUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuA9loX5agj6IiTErYOCDrdMMDCNZpdpPoNirta-n__sd7zFJUNonGAZdr5RKk737Cf1kFU01wjZznLiAEX4x31Wt-QL6-36TMOFA178K4hpZEXnmnoN7ELQr0f-9mjlRfB2HTgS8_C-eVGSEtE-sfXgwOYFlPJ5PDB478B5p_rxfGuGtFBlX-JDC678LCYIKwkz-4gz0023LyFLJl4r28UsZZiWYHZU-7RASnwunrCIV3v8zbuPN1kd',
-    modes: ["Individual (Solo Battle Royale)", "Dúo (2 jugadores)", "Escuadrón (mínimo 4 jugadores)"],
+    modes: [
+      { label: '1 vs 1 (Solo)', formats: ['single_elim'], participantType: 'individual', minPlayersPerTeam: 1 },
+      { label: 'Dúos', formats: ['battle_royale'], participantType: 'team', minPlayersPerTeam: 2 },
+      { label: 'Escuadrón', formats: ['battle_royale'], participantType: 'team', minPlayersPerTeam: 4 },
+    ],
     defaultRules: [
       "Puntuación por eliminaciones y posición final (Placement Points).",
       "Claves de emparejamiento personalizadas proporcionadas por el Organizador.",
@@ -162,10 +209,11 @@ export const GAMES_CATALOG = [
     name: 'Marvel Rivals',
     formatLabel: 'En equipos (6v6)',
     category: 'esports',
-    minPlayers: 6,
     supportsCustomRoster: true,
     imageUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuBrTxVDl5iTliF-KJ1_pFXrvWqPgXKfY9WcjIrxSUPgK5_wdtdTI4_5ZrqRIW1ssKmHGBFSivPiGYhl8wnQ6laejmVIGfqk6BP1InzfIh1LOkssyuG-N5TMxQuaIzQs0TtODUXoP5lmvWlp5u19VVHQwP0UD8W0XJjOpu3cxtogXYfw32eEuquJ8D4qixnrJy3rFonkMxRx6FrulBc3zvbAhDsto2J3Q0FciZfsbXQWzyd7n7jeXIam',
-    modes: ["Equipos de 6 jugadores mínimo", "6v6 Convoy & Domination", "6v6 Tactical Team Battle"],
+    modes: [
+      { label: '6 vs 6', formats: TEAM_FORMATS, participantType: 'team', minPlayersPerTeam: 6 },
+    ],
     defaultRules: [
       "Equipos compuestos por mínimo 6 titulares y hasta 2 suplentes.",
       "Reglas oficiales de roles (Vanguard, Duelist, Strategist).",
@@ -177,10 +225,14 @@ export const GAMES_CATALOG = [
     name: 'Rocket League',
     formatLabel: '1v1, 2v2, 3v3 o 4v4',
     category: 'esports',
-    minPlayers: 3,
     supportsCustomRoster: true,
     imageUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDzK9bnQxtdRDxWr1OgKqGs1xZeXwSk9OkTLhs-aVhESAhsjnU6-eGOKPDgFpg5ST2LCfWZtbFsYsjFpSLyjUhO46PzT6XLUF5m44kA20CECz6J-XRlrQTWzkUM2tVgH4nq88vFo6HpniL6gnKq7iUmr0zQvrhJaowzzwoWQVglOcR9Gpga2y3wCT2gXf-9PFI5On5tpKefVHr-2ZijRuvy1N05nHmmzudS7-0kB7QuJoAf_Hb0XIqI',
-    modes: ["3v3 Estándar", "4v4 Chaos", "2v2 Doubles (Configuración Personalizada)", "1v1 Duel"],
+    modes: [
+      { label: '1 vs 1', formats: TEAM_FORMATS, participantType: 'individual', minPlayersPerTeam: 1 },
+      { label: '2 vs 2', formats: TEAM_FORMATS, participantType: 'team', minPlayersPerTeam: 2 },
+      { label: '3 vs 3', formats: TEAM_FORMATS, participantType: 'team', minPlayersPerTeam: 3 },
+      { label: '4 vs 4', formats: TEAM_FORMATS, participantType: 'team', minPlayersPerTeam: 4 },
+    ],
     defaultRules: [
       "Estadios estándar de competición (DFH Stadium / Champions Field).",
       "Partidos estándar de 5 minutos con Overtime ilimitado.",
@@ -192,10 +244,11 @@ export const GAMES_CATALOG = [
     name: 'Dota 2',
     formatLabel: 'En equipos (5v5)',
     category: 'esports',
-    minPlayers: 5,
     supportsCustomRoster: true,
     imageUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuAZ6a2watCujoOGMeM2VvZjXZdXpkjo-QGH4ZYjkZzyGlpZpEfIItCQPN0eR8kwvKR_TLk9747pXXs-oefG2gbuetYaJDRRCj-mfM5DoiGZYGmuE2Q_oJvNirlBrkZbUAz3fQcfFHh0Y-8LCWZx2sOPIk7KjB5-IQlNDnlfteVSr6y1XxPqu2RPV6ILOyyEoGFbduyJVDkjvv4lVRaPNoW88v8f0SfzWEPiO0KyFJPQNJhXwsMu6Aau',
-    modes: ["5 jugadores por equipo", "5v5 Captains Mode", "5v5 Mid Only"],
+    modes: [
+      { label: '5 vs 5', formats: TEAM_FORMATS, participantType: 'team', minPlayersPerTeam: 5 },
+    ],
     defaultRules: [
       "Modo Capitanes oficial de Valve.",
       "Pausa reglamentaria máxima de 15 minutos en caso de desconexión.",
@@ -207,10 +260,11 @@ export const GAMES_CATALOG = [
     name: 'Mortal Kombat 1',
     formatLabel: '1 vs 1',
     category: 'esports',
-    minPlayers: 1,
     supportsCustomRoster: false,
     imageUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuAS5AOXFhCvgLGyNNos_JkAMX28DKy70xSER5PqdCrTSqzs9ml0Ri8mnJSXgNO8P5MY-EiQSLsoqHXIAKujiqW-s2HkxIDOccoytdnNo6i30sTpg9HeOVDk9CcYFRPBZY0nxplISxYyMNXK5FfDCuDOQds5_vgQtIAAaLKhMj7guLJdb_kjX8DzKCanIsszOJx8T8O9EAfVR1hBN_eLtgoT-VJTCWtZdsbzJeQa319-lqcjTY_AXb9i',
-    modes: ["Individual (1v1)", "1v1 Torneo Doble Eliminación"],
+    modes: [
+      { label: 'Individual (1 vs 1)', formats: FIGHTING_GAME_FORMATS, participantType: 'individual', minPlayersPerTeam: 1 },
+    ],
     defaultRules: [
       "Macros y Turbo: prohibidos.",
       "Cheats y Bots: prohibidos.",
@@ -232,10 +286,11 @@ export const GAMES_CATALOG = [
     name: 'Super Smash Bros. Ultimate',
     formatLabel: '1 vs 1',
     category: 'esports',
-    minPlayers: 1,
     supportsCustomRoster: false,
     imageUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDsrjbiF1-xf6aBi0FFcPDScDhF7b4qtCTPSOxSj9yOi7iNXBTzvdb1QErsvh263SpfNT0m-MobpCzwDTefIA7RaJgqgUnExYAfoaCZk7RQ8Vj4pPI9lsEoa9BtdDsZEQ8HY-U_BgOJBKNk-h8uovKN-KbnaKNOPQasTLZKrG_KmNUQrLoE5FawwEzcIdHgskCJr5kM0AQ-Lp4bo0-4OJYAf_8VqWUOD18albyrBIpbtJBPKoc8bal-',
-    modes: ["Individual (1v1)", "1v1 Bracket Competitivo"],
+    modes: [
+      { label: 'Individual (1 vs 1)', formats: FIGHTING_GAME_FORMATS, participantType: 'individual', minPlayersPerTeam: 1 },
+    ],
     defaultRules: [
       "3 Vidas (Stocks), 7 Minutos, Objetos y Smash Final desactivados.",
       "Escenarios legales oficiales (Battlefield, Final Destination, Smashville, Small Battlefield, Hollow Bastion).",
@@ -249,10 +304,12 @@ export const GAMES_CATALOG = [
     name: 'Fútbol',
     formatLabel: 'En equipos (6v6 u 11v11)',
     category: 'sports',
-    minPlayers: 6,
     supportsCustomRoster: true,
     imageUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuBEpGzGVlCu2KR93i-msWvHXFTyCormSoU22Qi6g_ALCHMxWG_ni5teI2FeLaI0CdIIS5VqijKGfy8mGOcA2qGgryOI9uDensDF1iBAe2sTaakVYQpCcBBAFg7MXuiZOmkOh_W5JPB6Gud5F1qssqI1trLATbj0T1lAvsbfBkZrvR2yaR3N0Pm2KsA8vi0ip-V59ZNa6AOfB5LUJJQ1WuwWzJeaPfnzAS-q_9Wo5nrkvP0rbFYbjPU6',
-    modes: ["6 jugadores mínimo (Fútbol 6 / 7)", "11 jugadores mínimo (Fútbol 11 Profesional)"],
+    modes: [
+      { label: 'Fútbol 6/7 (6 jugadores mínimo)', formats: TEAM_FORMATS, participantType: 'team', minPlayersPerTeam: 6 },
+      { label: 'Fútbol 11 (11 jugadores mínimo)', formats: TEAM_FORMATS, participantType: 'team', minPlayersPerTeam: 11 },
+    ],
     defaultRules: [
       "Reglamento oficial FIFA / Federación local.",
       "Uso obligatorio de canilleras y calzado reglamentario.",
@@ -265,10 +322,12 @@ export const GAMES_CATALOG = [
     name: 'Básquetbol',
     formatLabel: 'En equipos (3v3 o 5v5)',
     category: 'sports',
-    minPlayers: 3,
     supportsCustomRoster: true,
     imageUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDxfhIi_Uc2E5XjaIxEr6oC36E1-LEnmhbcetDhsRqWdkyuWoQtGz9CJs3u_w2Ednj-ho04o1g0h4UOMXG2pnhq_uBy1TmzmOs_7FcQiFqyplMGJ-FPIvl9c4evuylX8tyuFagLDZ77K_PMErD8PNX1hb-HX2OcnzyB97jmjPbZ2ou5uBpYKC8jpMs90NyTZuPh13hQ3UsgAVKQMLbPqiBkKZDKq84LhITO4VoLRo3jZCyFEPJzpL0W',
-    modes: ["3v3 Media Cancha (Reglas FIBA 3x3)", "5v5 Cancha Completa"],
+    modes: [
+      { label: '3 vs 3 Media Cancha (FIBA 3x3)', formats: TEAM_FORMATS, participantType: 'team', minPlayersPerTeam: 3 },
+      { label: '5 vs 5 Cancha Completa', formats: TEAM_FORMATS, participantType: 'team', minPlayersPerTeam: 5 },
+    ],
     defaultRules: [
       "Modalidad 3v3 a 21 puntos o 10 minutos de juego.",
       "Modalidad 5v5 con 4 cuartos de 10 o 12 minutos reglamentarios.",
@@ -280,10 +339,12 @@ export const GAMES_CATALOG = [
     name: 'Tenis',
     formatLabel: '1 vs 1 o Dúos',
     category: 'sports',
-    minPlayers: 1,
     supportsCustomRoster: false,
     imageUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDD89uoywUWDbvETv4dfGl0xCodaipi21Xdr2Ip3gMq-SSGqYP5FurPI0iXpAdqQ7xm3MqiknXafN2hgFmzvRAJ8bN1IEwPVMIPsSArTYDFfLvVzyj2mulH4eexCNkTpP_9NF3yutCs5xyFn_HGmTgmH2caLS0CJ_IImzNYTKBn6Dt7_DlWqr5qC7I_qeYl8xDa3E-wR9Qz16ArSeIFu_HzNnaNttadUzBNuQqLbDOL1kSdlm1iVsPO',
-    modes: ["Individual (Singles 1v1)", "Dobles (2v2)"],
+    modes: [
+      { label: 'Individual (Singles 1v1)', formats: RACKET_SPORT_FORMATS, participantType: 'individual', minPlayersPerTeam: 1 },
+      { label: 'Dobles (2v2)', formats: RACKET_SPORT_FORMATS, participantType: 'team', minPlayersPerTeam: 2 },
+    ],
     defaultRules: [
       "Partidos al mejor de 3 sets con Tie-Break tradicional.",
       "Canchas de arcilla o pista dura designadas por el Organizador.",
@@ -295,10 +356,11 @@ export const GAMES_CATALOG = [
     name: 'Ping Pong (Tenis de Mesa)',
     formatLabel: '1 vs 1',
     category: 'sports',
-    minPlayers: 1,
     supportsCustomRoster: false,
     imageUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDhdeQB_yFCO8jMtmO6bpy2LPXQ25klHsbAk0DLo25riTl9pzDizV33b-_KoaU-GUinLpS9yu0KD_l59Fj3ekRoRdpa1pWCog7SQzwOiE1oRnDkwkvaWuWmgsrmHx52W_8VtSDIu_uH0F1MXk0AIeOvAiwHio8X8gRqqaBnGcy88fcm2OZet9w0sIgkdv8z8AJ6m1GHoYHP-sfICbLgWb0w8-9PqtOM1XbZZK9Jkaarxc8eOVWLCAUo',
-    modes: ["Individual (1v1)", "1v1 Torneo Abierto"],
+    modes: [
+      { label: 'Individual (1 vs 1)', formats: RACKET_SPORT_FORMATS, participantType: 'individual', minPlayersPerTeam: 1 },
+    ],
     defaultRules: [
       "Sets a 11 puntos con diferencia de 2; al mejor de 5 sets (Bo5).",
       "Paleta reglamentaria con gomas aprobadas por la ITTF.",

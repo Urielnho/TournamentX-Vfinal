@@ -487,3 +487,28 @@ export async function cancelTournamentRegistration(tournamentId: string): Promis
   }
   return { refunded: Boolean(data?.refunded) };
 }
+
+export interface EligibleParticipant { id: string; name: string; tag?: string; membersCount?: number; }
+
+export async function searchEligibleUsers(query: string): Promise<EligibleParticipant[]> {
+  if (!supabase) throw new Error('Supabase no está configurado.');
+  const { data, error } = await supabase.rpc('search_eligible_users', { search_query: query });
+  if (error) throw error;
+  return (data || []).map((row: any) => ({ id: row.id, name: row.full_name || row.gamer_tag, tag: row.gamer_tag }));
+}
+
+export async function searchEligibleTeams(query: string, minRoster: number): Promise<EligibleParticipant[]> {
+  if (!supabase) throw new Error('Supabase no está configurado.');
+  const { data, error } = await supabase.rpc('search_eligible_teams', { search_query: query, min_roster: minRoster });
+  if (error) throw error;
+  return (data || []).map((row: any) => ({ id: row.id, name: row.name, tag: row.tag, membersCount: Number(row.members_count) }));
+}
+
+export async function inviteTournamentParticipant(tournamentId: string, target: { userId?: string; teamId?: string }) {
+  if (!supabase) throw new Error('Supabase no está configurado.');
+  const { error } = await supabase.rpc('invite_tournament_participant', {
+    target_tournament_id: tournamentId, target_user_id: target.userId || null, target_team_id: target.teamId || null,
+  });
+  if (error) throw error;
+  void flushEmailOutbox();
+}

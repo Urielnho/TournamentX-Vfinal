@@ -1,10 +1,14 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Tournament, TournamentCategory, TournamentFormat, ViewMode, AccessType, EntryFeeType, PrizeType, Sponsor, MortalKombatConfig } from '../types';
-import { GAMES_CATALOG } from '../data/mockData';
+import { GAMES_CATALOG, TOURNAMENT_REGIONS, TOURNAMENT_FORMAT_LABELS } from '../data/mockData';
 import { Trophy, CheckCircle2, ArrowRight, ArrowLeft, Gamepad2, Layers, DollarSign, Calendar, Sparkles, Shield, Upload, Globe, MapPin, Tv, Plus, Trash2, AlertCircle, Info, Lock } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { OrganizerFundingPayment } from './OrganizerFundingPayment';
-import { createOrganizerPaymentIntent, uploadTournamentBanner, waitForOrganizerFunding } from '../services/supabaseData';
+import { InviteParticipantsStep } from './wizard/InviteParticipantsStep';
+import { createOrganizerPaymentIntent, uploadTournamentBanner, waitForOrganizerFunding, EligibleParticipant, inviteTournamentParticipant } from '../services/supabaseData';
+import { toLocalDateTimeInput } from '../utils/dateInput';
+import { sanitizeText } from '../utils/textSanitize';
+import { isValidStreamUrl } from '../utils/streamUrl';
 
 interface CreateTournamentWizardProps {
   onTournamentCreated: (newTournament: Tournament) => Promise<Tournament>;
@@ -32,7 +36,7 @@ export const CreateTournamentWizard: React.FC<CreateTournamentWizardProps> = ({
   // Step 2: Categoría, Juego & Formato
   const [category, setCategory] = useState<TournamentCategory>('esports');
   const [selectedGameId, setSelectedGameId] = useState('lol');
-  const [gameMode, setGameMode] = useState("5v5 Summoner's Rift Tournament Draft");
+  const [gameMode, setGameMode] = useState('5 vs 5');
   const [format, setFormat] = useState<TournamentFormat>('single_elim');
   const [mkConfig, setMkConfig] = useState<MortalKombatConfig>({
     initialSetFormat: 'bo3', finalSetFormat: 'bo5', roundTimeSeconds: 60,
@@ -48,6 +52,8 @@ export const CreateTournamentWizard: React.FC<CreateTournamentWizardProps> = ({
   const [onlineRegion, setOnlineRegion] = useState('');
   const [venueName, setVenueName] = useState('');
   const [venueAddress, setVenueAddress] = useState('');
+  const [venueRegion, setVenueRegion] = useState('');
+  const [isHybridVenue, setIsHybridVenue] = useState(false);
 
   // Step 3: Fechas, Acceso y Cupos
   const [startDate, setStartDate] = useState('');
@@ -85,8 +91,18 @@ export const CreateTournamentWizard: React.FC<CreateTournamentWizardProps> = ({
   const [sponsorLink, setSponsorLink] = useState('https://');
   const [formError, setFormError] = useState('');
 
+  // Paso 5: invitaciones (solo torneos privados)
+  const [invitedParticipants, setInvitedParticipants] = useState<EligibleParticipant[]>([]);
+  const totalSteps = accessType === 'private' ? 5 : 4;
+
   const selectedGame = GAMES_CATALOG.find(g => g.id === selectedGameId) || GAMES_CATALOG[0];
+  const selectedModeConfig = selectedGame.modes.find(m => m.label === gameMode) ?? selectedGame.modes[0];
   const todayMinimum = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(new Date().getDate()).padStart(2, '0')}T00:00`;
+  const registrationDeadlineMinimum = toLocalDateTimeInput(new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString());
+  const forcedOnline = hasStream && streamUrl.trim().length > 0;
+  const effectiveLocationType: 'online' | 'onsite' = forcedOnline ? 'online' : locationType;
+
+  useEffect(() => { setInvitedParticipants([]); }, [participantType]);
 
   const handleStartDateChange = (value: string) => {
     setStartDate(value);
@@ -96,23 +112,15 @@ export const CreateTournamentWizard: React.FC<CreateTournamentWizardProps> = ({
   const handleGameSelect = (gameId: string) => {
     setSelectedGameId(gameId);
     const game = GAMES_CATALOG.find(g => g.id === gameId);
-    if (game) {
-      if (game.modes.length > 0) {
-        setGameMode(game.modes[0]);
-      }
-      setMinPlayersPerTeam(game.minPlayers);
-      setParticipantType(game.minPlayers === 1 ? 'individual' : 'team');
-      if (game.defaultRules) {
-        setRules([...game.defaultRules]);
-      }
-      if (gameId === 'mortalkombat') {
-        setFormat('double_elim');
-        setGameMode('Individual (1v1)');
-        setParticipantType('individual');
-        setMinPlayersPerTeam(1);
-        setMaxParticipants(16);
-      }
+    if (!game) return;
+    const firstMode = game.modes[0];
+    if (firstMode) {
+      setGameMode(firstMode.label);
+      setFormat(firstMode.formats[0]);
+      setParticipantType(firstMode.participantType);
+      setMinPlayersPerTeam(firstMode.minPlayersPerTeam);
     }
+    setRules([...game.defaultRules]);
   };
 
   const handleAddSponsor = () => {
@@ -135,7 +143,7 @@ export const CreateTournamentWizard: React.FC<CreateTournamentWizardProps> = ({
 
   const handleAddRule = () => {
     if (!newRuleInput.trim()) return;
-    setRules([...rules, newRuleInput.trim()]);
+    setRules([...rules, sanitizeText(newRuleInput.trim())]);
     setNewRuleInput('');
   };
 
@@ -155,10 +163,13 @@ export const CreateTournamentWizard: React.FC<CreateTournamentWizardProps> = ({
     let error = '';
     if (step === 1 && (!tournamentName.trim() || !description.trim())) error = 'Completa el nombre y la descripción del torneo.';
     else if (step === 1 && hasStream && !streamUrl.trim()) error = 'Agrega el enlace de la transmisión o desactiva esta opción.';
-    else if (step === 2 && locationType === 'online' && !onlineRegion.trim()) error = 'Selecciona la región del torneo en línea.';
-    else if (step === 2 && locationType === 'onsite' && (!venueName.trim() || !venueAddress.trim())) error = 'Indica el recinto y la dirección del torneo presencial.';
+    else if (step === 1 && hasStream && streamUrl.trim() && !isValidStreamUrl(streamPlatform, streamUrl)) error = `La URL de transmisión no parece ser de ${streamPlatform === 'twitch' ? 'Twitch' : 'YouTube'}. Revisa el formato del enlace.`;
+    else if (step === 2 && effectiveLocationType === 'online' && !onlineRegion.trim()) error = 'Selecciona la región del torneo en línea.';
+    else if (step === 2 && effectiveLocationType === 'onsite' && (!venueName.trim() || !venueAddress.trim() || !venueRegion.trim())) error = 'Indica el recinto, la dirección y la región del torneo presencial.';
+    else if (step === 2 && forcedOnline && isHybridVenue && (!venueName.trim() || !venueAddress.trim())) error = 'Completa el recinto y la dirección del evento híbrido, o desactiva esa opción.';
     else if (step === 3 && (!startDate || !endDate || !registrationDeadline)) error = 'Completa las fechas del torneo y de inscripción.';
     else if (step === 3 && [startDate, endDate, registrationDeadline].some(value => value < todayMinimum)) error = 'No puedes seleccionar días anteriores a hoy.';
+    else if (step === 3 && registrationDeadline && new Date(registrationDeadline).getTime() < Date.now() + 2 * 60 * 60 * 1000) error = 'El periodo de inscripciones es muy corto: deja al menos 2 horas entre este momento y el cierre de inscripciones.';
     else if (step === 3 && new Date(endDate) < new Date(startDate)) error = 'La fecha de finalización no puede ser anterior al inicio.';
     else if (step === 3 && new Date(registrationDeadline) > new Date(startDate)) error = 'El cierre de inscripciones no puede ser posterior al inicio.';
     else if (step === 3 && maxParticipants < 2) error = 'El torneo necesita al menos dos participantes.';
@@ -167,6 +178,7 @@ export const CreateTournamentWizard: React.FC<CreateTournamentWizardProps> = ({
     else if (step === 4 && prizeType === 'monetary' && (basePrizePool < 1 || basePrizePool > 10000000)) error = 'El premio monetario debe estar entre $1 y $10,000,000 MXN.';
     else if (step === 4 && (prizeType === 'monetary' || (prizeType === 'other' && entryFeeType !== 'free')) && prizePercentageTotal !== 100) error = 'Los porcentajes de los lugares premiados deben sumar exactamente 100%.';
     else if (step === 4 && prizeType === 'other' && !otherPrizeDesc.trim()) error = 'Describe el premio no monetario.';
+    else if (step === 5 && accessType === 'private' && invitedParticipants.length === 0) error = 'Invita al menos un participante antes de publicar tu torneo privado.';
     setFormError(error);
     return !error;
   };
@@ -175,8 +187,17 @@ export const CreateTournamentWizard: React.FC<CreateTournamentWizardProps> = ({
     if (validateStep(currentStep)) setCurrentStep(prev => prev + 1);
   };
 
+  const sendPendingInvitations = async (tournamentId: string) => {
+    if (accessType !== 'private' || invitedParticipants.length === 0) return;
+    const results = await Promise.allSettled(invitedParticipants.map(p =>
+      inviteTournamentParticipant(tournamentId, participantType === 'team' ? { teamId: p.id } : { userId: p.id })
+    ));
+    const failed = results.filter(r => r.status === 'rejected').length;
+    if (failed > 0) setFormError(`Se publicó el torneo, pero ${failed} invitación(es) no se pudieron enviar. Reenvíalas desde el panel del organizador.`);
+  };
+
   const handleFinish = async () => {
-    if (!validateStep(4)) return;
+    if (!validateStep(totalSteps)) return;
     const created: Tournament = {
       id: `tourn-${Date.now()}`,
       title: tournamentName.trim(),
@@ -194,10 +215,10 @@ export const CreateTournamentWizard: React.FC<CreateTournamentWizardProps> = ({
       accessType: accessType,
       bannerUrl: bannerUrl.trim() || selectedGame.imageUrl,
       location: {
-        type: locationType,
-        region: locationType === 'online' ? onlineRegion : undefined,
-        venueName: locationType === 'onsite' ? venueName : undefined,
-        address: locationType === 'onsite' ? venueAddress : undefined,
+        type: effectiveLocationType,
+        region: effectiveLocationType === 'online' ? onlineRegion : venueRegion,
+        venueName: (effectiveLocationType === 'onsite' || (forcedOnline && isHybridVenue)) ? venueName : undefined,
+        address: (effectiveLocationType === 'onsite' || (forcedOnline && isHybridVenue)) ? venueAddress : undefined,
       },
       stream: hasStream ? {
         platform: streamPlatform,
@@ -241,6 +262,7 @@ export const CreateTournamentWizard: React.FC<CreateTournamentWizardProps> = ({
         setIsPublishing(false);
         return;
       }
+      await sendPendingInvitations(savedTournament.id);
       confetti({ particleCount: 80, spread: 70, origin: { y: 0.5 } });
       onNavigate('tournament-detail', savedTournament.id);
     } catch (error) {
@@ -251,14 +273,13 @@ export const CreateTournamentWizard: React.FC<CreateTournamentWizardProps> = ({
     }
   };
 
-  const handleModeSelect = (mode: string) => {
-    setGameMode(mode);
-    const normalized = mode.toLowerCase();
-    const individual = normalized.includes('individual') || normalized.includes('solo ') || normalized.includes('1v1');
-    const sizeMatch = mode.match(/(\d+)v\d+|(?:dúo|dobles).*?(\d+)|escuadrón.*?(\d+)/i);
-    const teamSize = Number(sizeMatch?.[1] || sizeMatch?.[2] || sizeMatch?.[3] || selectedGame.minPlayers);
-    setParticipantType(individual ? 'individual' : 'team');
-    setMinPlayersPerTeam(individual ? 1 : Math.max(2, teamSize));
+  const handleModeSelect = (modeLabel: string) => {
+    const mode = selectedGame.modes.find(m => m.label === modeLabel);
+    if (!mode) return;
+    setGameMode(mode.label);
+    setParticipantType(mode.participantType);
+    setMinPlayersPerTeam(mode.minPlayersPerTeam);
+    setFormat(current => (mode.formats.includes(current) ? current : mode.formats[0]));
   };
 
   const handleBannerUpload = async (file?: File) => {
@@ -272,6 +293,7 @@ export const CreateTournamentWizard: React.FC<CreateTournamentWizardProps> = ({
 
   const handleFundingPaid = async () => {
     await waitForOrganizerFunding(draftTournamentId);
+    await sendPendingInvitations(draftTournamentId);
     await onTournamentPublished(draftTournamentId);
     confetti({ particleCount: 80, spread: 70, origin: { y: 0.5 } });
     onNavigate('tournament-detail', draftTournamentId);
@@ -285,7 +307,7 @@ export const CreateTournamentWizard: React.FC<CreateTournamentWizardProps> = ({
           <div>
             <div className="flex items-center gap-2">
               <span className="text-xs font-bold uppercase tracking-wider text-black">
-                Paso {currentStep} de 4
+                Paso {currentStep} de {totalSteps}
               </span>
               <span className="text-xs text-gray-500">• Módulo de Creación</span>
             </div>
@@ -294,6 +316,7 @@ export const CreateTournamentWizard: React.FC<CreateTournamentWizardProps> = ({
               {currentStep === 2 && 'Categoría, Juego, Formato & Ubicación'}
               {currentStep === 3 && 'Fechas, Acceso, Cupos & Reglas'}
               {currentStep === 4 && 'Premios, Patrocinadores & Publicación'}
+              {currentStep === 5 && 'Participantes Invitados'}
             </h1>
           </div>
 
@@ -308,8 +331,8 @@ export const CreateTournamentWizard: React.FC<CreateTournamentWizardProps> = ({
         {/* Progress Bar */}
         <div className="w-full h-2 bg-[#E5E7EB] rounded-full overflow-hidden flex">
           <div 
-            className="bg-black h-full transition-all duration-300 rounded-full" 
-            style={{ width: `${(currentStep / 4) * 100}%` }}
+            className="bg-black h-full transition-all duration-300 rounded-full"
+            style={{ width: `${(currentStep / totalSteps) * 100}%` }}
           />
         </div>
       </div>
@@ -334,7 +357,7 @@ export const CreateTournamentWizard: React.FC<CreateTournamentWizardProps> = ({
                 type="text" 
                 maxLength={50}
                 value={tournamentName}
-                onChange={(e) => setTournamentName(e.target.value)}
+                onChange={(e) => setTournamentName(sanitizeText(e.target.value))}
                 placeholder="Ej. Cyber Clash 2024"
                 className="w-full bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl p-3.5 text-xs text-black focus:border-black outline-none font-medium"
               />
@@ -354,7 +377,7 @@ export const CreateTournamentWizard: React.FC<CreateTournamentWizardProps> = ({
                 type="text" 
                 maxLength={80}
                 value={description}
-                onChange={(e) => setDescription(e.target.value)}
+                onChange={(e) => setDescription(sanitizeText(e.target.value))}
                 placeholder="Ej. Torneo táctico de élite con gran final en vivo."
                 className="w-full bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl p-3.5 text-xs text-black focus:border-black outline-none font-medium"
               />
@@ -410,7 +433,7 @@ export const CreateTournamentWizard: React.FC<CreateTournamentWizardProps> = ({
                     <input
                       type="text"
                       value={channelName}
-                      onChange={(e) => setChannelName(e.target.value)}
+                      onChange={(e) => setChannelName(sanitizeText(e.target.value))}
                       placeholder="Canal / nombre"
                       className="w-full bg-white border border-[#E5E7EB] rounded-xl p-2.5 text-xs text-black outline-none"
                     />
@@ -418,13 +441,23 @@ export const CreateTournamentWizard: React.FC<CreateTournamentWizardProps> = ({
 
                   <div className="space-y-1">
                     <label className="text-[11px] text-gray-500 font-bold">Enlace directo (URL)</label>
-                    <input
-                      type="url"
-                      value={streamUrl}
-                      onChange={(e) => setStreamUrl(e.target.value)}
-                      placeholder="https://twitch.tv/..."
-                      className="w-full bg-white border border-[#E5E7EB] rounded-xl p-2.5 text-xs text-black outline-none"
-                    />
+                    <div className="relative">
+                      <input
+                        type="url"
+                        value={streamUrl}
+                        onChange={(e) => setStreamUrl(e.target.value)}
+                        placeholder="https://twitch.tv/..."
+                        className="w-full bg-white border border-[#E5E7EB] rounded-xl p-2.5 pr-8 text-xs text-black outline-none"
+                      />
+                      {streamUrl.trim() && isValidStreamUrl(streamPlatform, streamUrl) && (
+                        <CheckCircle2 className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-green-600" />
+                      )}
+                    </div>
+                    {streamUrl.trim() && !isValidStreamUrl(streamPlatform, streamUrl) && (
+                      <p className="text-[10px] text-red-600 font-semibold">
+                        La URL no corresponde a {streamPlatform === 'twitch' ? 'Twitch (ej. https://twitch.tv/tuCanal)' : 'YouTube (ej. https://youtube.com/@tuCanal o https://youtu.be/xxxx)'}.
+                      </p>
+                    )}
                   </div>
                 </div>
               )}
@@ -516,13 +549,13 @@ export const CreateTournamentWizard: React.FC<CreateTournamentWizardProps> = ({
                 <label className="text-xs font-bold text-black uppercase">
                   Modo de Juego
                 </label>
-                <select 
+                <select
                   value={gameMode}
                   onChange={(e) => handleModeSelect(e.target.value)}
                   className="w-full bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl p-3 text-xs text-black outline-none font-medium"
                 >
-                  {selectedGame.modes.map((mode, idx) => (
-                    <option key={idx} value={mode}>{mode}</option>
+                  {selectedGame.modes.map((mode) => (
+                    <option key={mode.label} value={mode.label}>{mode.label}</option>
                   ))}
                 </select>
               </div>
@@ -531,19 +564,14 @@ export const CreateTournamentWizard: React.FC<CreateTournamentWizardProps> = ({
                 <label className="text-xs font-bold text-black uppercase">
                   Formato del Torneo
                 </label>
-                <select 
+                <select
                   value={format}
                   onChange={(e) => setFormat(e.target.value as TournamentFormat)}
                   className="w-full bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl p-3 text-xs text-black outline-none font-medium"
                 >
-                  <option value="single_elim">Eliminación directa (Single Elimination)</option>
-                  <option value="double_elim">Doble eliminación (recomendado para MK1)</option>
-                  <option value="group_stage">Fase de grupos</option>
-                  <option value="groups_elim">Fase de grupos + eliminación</option>
-                  <option value="round_robin">Todos contra todos (Round Robin)</option>
-                  {selectedGameId !== 'mortalkombat' && <option value="league">Liga por puntos</option>}
-                  {selectedGameId !== 'mortalkombat' && <option value="battle_royale">Battle Royale</option>}
-                  {selectedGameId !== 'mortalkombat' && <option value="custom">Formato personalizado</option>}
+                  {selectedModeConfig.formats.map((f) => (
+                    <option key={f} value={f}>{TOURNAMENT_FORMAT_LABELS[f]}</option>
+                  ))}
                 </select>
               </div>
             </div>
@@ -567,20 +595,51 @@ export const CreateTournamentWizard: React.FC<CreateTournamentWizardProps> = ({
 
             <div className="space-y-3 pt-4 border-t border-[#E5E7EB]">
               <label className="text-xs font-bold text-black uppercase">Ubicación del torneo</label>
-              <div className="grid grid-cols-2 gap-2">
-                {([['online', 'En línea', Globe], ['onsite', 'Presencial', MapPin]] as const).map(([id, label, Icon]) => (
-                  <button key={id} type="button" onClick={() => setLocationType(id)} className={`rounded-2xl border p-3 text-xs font-bold flex items-center justify-center gap-2 ${locationType === id ? 'border-black bg-black text-white' : 'border-[#E5E7EB] bg-white text-black'}`}>
-                    <Icon className="w-4 h-4" />{label}
-                  </button>
-                ))}
-              </div>
-              {locationType === 'online' ? (
-                <select value={onlineRegion} onChange={e => setOnlineRegion(e.target.value)} className="w-full rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] p-3 text-xs outline-none"><option value="">Selecciona una región</option><option value="Norteamérica">Norteamérica</option><option value="Sudamérica">Sudamérica</option><option value="Europa">Europa</option></select>
-              ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <input value={venueName} onChange={e => setVenueName(e.target.value)} placeholder="Nombre del recinto" className="rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] p-3 text-xs outline-none" />
-                  <input value={venueAddress} onChange={e => setVenueAddress(e.target.value)} placeholder="Dirección completa" className="rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] p-3 text-xs outline-none" />
+              {forcedOnline ? (
+                <div className="space-y-3">
+                  <div className="rounded-2xl border border-black bg-black p-3 text-xs font-bold text-white flex items-center justify-center gap-2">
+                    <Globe className="w-4 h-4" /> En línea (definido por tu transmisión oficial)
+                  </div>
+                  <select value={onlineRegion} onChange={e => setOnlineRegion(e.target.value)} className="w-full rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] p-3 text-xs outline-none">
+                    <option value="">Selecciona una región</option>
+                    {TOURNAMENT_REGIONS.map(r => <option key={r} value={r}>{r}</option>)}
+                  </select>
+                  <label className="flex items-center gap-2 rounded-2xl border border-[#E5E7EB] bg-[#F9FAFB] p-3 text-xs font-bold cursor-pointer">
+                    <input type="checkbox" checked={isHybridVenue} onChange={e => setIsHybridVenue(e.target.checked)} className="w-4 h-4 accent-black cursor-pointer" />
+                    ¿También se jugará en un lugar físico? (evento híbrido)
+                  </label>
+                  {isHybridVenue && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <input value={venueName} onChange={e => setVenueName(sanitizeText(e.target.value))} placeholder="Nombre del recinto" className="rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] p-3 text-xs outline-none" />
+                      <input value={venueAddress} onChange={e => setVenueAddress(sanitizeText(e.target.value))} placeholder="Dirección completa" className="rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] p-3 text-xs outline-none" />
+                    </div>
+                  )}
                 </div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-2 gap-2">
+                    {([['online', 'En línea', Globe], ['onsite', 'Presencial', MapPin]] as const).map(([id, label, Icon]) => (
+                      <button key={id} type="button" onClick={() => setLocationType(id)} className={`rounded-2xl border p-3 text-xs font-bold flex items-center justify-center gap-2 ${locationType === id ? 'border-black bg-black text-white' : 'border-[#E5E7EB] bg-white text-black'}`}>
+                        <Icon className="w-4 h-4" />{label}
+                      </button>
+                    ))}
+                  </div>
+                  {locationType === 'online' ? (
+                    <select value={onlineRegion} onChange={e => setOnlineRegion(e.target.value)} className="w-full rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] p-3 text-xs outline-none">
+                      <option value="">Selecciona una región</option>
+                      {TOURNAMENT_REGIONS.map(r => <option key={r} value={r}>{r}</option>)}
+                    </select>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <input value={venueName} onChange={e => setVenueName(sanitizeText(e.target.value))} placeholder="Nombre del recinto" className="rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] p-3 text-xs outline-none" />
+                      <input value={venueAddress} onChange={e => setVenueAddress(sanitizeText(e.target.value))} placeholder="Dirección completa" className="rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] p-3 text-xs outline-none" />
+                      <select value={venueRegion} onChange={e => setVenueRegion(e.target.value)} className="sm:col-span-2 rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] p-3 text-xs outline-none">
+                        <option value="">Selecciona la región</option>
+                        {TOURNAMENT_REGIONS.map(r => <option key={r} value={r}>{r}</option>)}
+                      </select>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </div>
@@ -595,10 +654,10 @@ export const CreateTournamentWizard: React.FC<CreateTournamentWizardProps> = ({
                   <Calendar className="w-3.5 h-3.5 text-black" />
                   <span>Cierre Inscripciones</span>
                 </label>
-                <input 
-                  type="datetime-local" 
+                <input
+                  type="datetime-local"
                   value={registrationDeadline}
-                  min={todayMinimum}
+                  min={registrationDeadlineMinimum}
                   max={startDate || undefined}
                   onChange={(e) => setRegistrationDeadline(e.target.value)}
                   className="w-full bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl p-3 text-xs text-black outline-none"
@@ -613,7 +672,7 @@ export const CreateTournamentWizard: React.FC<CreateTournamentWizardProps> = ({
                 <input 
                   type="datetime-local" 
                   value={startDate}
-                  min={registrationDeadline || todayMinimum}
+                  min={registrationDeadline || registrationDeadlineMinimum}
                   onChange={(e) => handleStartDateChange(e.target.value)}
                   className="w-full bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl p-3 text-xs text-black outline-none"
                 />
@@ -693,9 +752,9 @@ export const CreateTournamentWizard: React.FC<CreateTournamentWizardProps> = ({
 
               <div className="flex gap-2">
                 <input 
-                  type="text" 
+                  type="text"
                   value={newRuleInput}
-                  onChange={(e) => setNewRuleInput(e.target.value)}
+                  onChange={(e) => setNewRuleInput(sanitizeText(e.target.value))}
                   placeholder="Escribe una regla adicional..."
                   className="flex-1 bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl px-3.5 py-2.5 text-xs text-black outline-none focus:border-black"
                 />
@@ -714,6 +773,12 @@ export const CreateTournamentWizard: React.FC<CreateTournamentWizardProps> = ({
         {/* STEP 4: PREMIOS, PATROCINADORES & PUBLICACIÓN */}
         {currentStep === 4 && (
           <div className="space-y-6">
+            {fundingClientSecret && (
+              <div className="flex items-center gap-2 rounded-2xl border border-amber-300 bg-amber-50 p-3 text-xs font-bold text-amber-900">
+                <Lock className="w-4 h-4" /> No puedes cambiar esta configuración mientras el pago está en proceso.
+              </div>
+            )}
+            <fieldset disabled={!!fundingClientSecret} className={fundingClientSecret ? 'space-y-6 opacity-50' : 'space-y-6'}>
             <div className="space-y-2">
               <label className="text-xs font-bold text-black uppercase">Tipo de premio</label>
               <div className="grid grid-cols-3 gap-2">
@@ -721,7 +786,7 @@ export const CreateTournamentWizard: React.FC<CreateTournamentWizardProps> = ({
                   <button key={id} type="button" onClick={() => { setPrizeType(id); if (id === 'no_prize') setOrganizerPercentage(0); }} className={`rounded-xl p-3 text-xs font-bold ${prizeType === id ? 'bg-black text-white' : 'border border-[#E5E7EB] bg-white'}`}>{label}</button>
                 ))}
               </div>
-              {prizeType === 'other' && <div className="space-y-2"><input value={otherPrizeDesc} onChange={e => setOtherPrizeDesc(e.target.value)} placeholder="Describe trofeo, productos o reconocimientos" className="w-full rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] p-3 text-xs outline-none" /><div className="rounded-2xl border border-amber-300 bg-amber-50 p-4 text-xs text-amber-950"><b>Aviso importante:</b> este premio se entrega directamente por el organizador fuera de Stripe. TournamentX no custodia el objeto, producto o servicio prometido y no se responsabiliza si el organizador no lo entrega.</div></div>}
+              {prizeType === 'other' && <div className="space-y-2"><input value={otherPrizeDesc} onChange={e => setOtherPrizeDesc(sanitizeText(e.target.value))} placeholder="Describe trofeo, productos o reconocimientos" className="w-full rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] p-3 text-xs outline-none" /><div className="rounded-2xl border border-amber-300 bg-amber-50 p-4 text-xs text-amber-950"><b>Aviso importante:</b> este premio se entrega directamente por el organizador fuera de Stripe. TournamentX no custodia el objeto, producto o servicio prometido y no se responsabiliza si el organizador no lo entrega.</div></div>}
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
@@ -773,7 +838,7 @@ export const CreateTournamentWizard: React.FC<CreateTournamentWizardProps> = ({
 
             {prizeType !== 'no_prize' && <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2"><label className="text-xs font-bold uppercase">Porcentaje del organizador</label><div className="relative"><input type="number" min={0} max={50} value={organizerPercentage} onChange={e => setOrganizerPercentage(Math.min(50, Math.max(0, Number(e.target.value))))} className="w-full rounded-2xl border border-[#E5E7EB] bg-[#F9FAFB] p-3 pr-9 text-xs outline-none" /><span className="absolute right-4 top-3 text-xs font-bold">%</span></div><p className="text-[11px] text-gray-600">De cada bolsa real, el organizador recibe {organizerPercentage}% y el {100 - organizerPercentage}% restante pertenece a los ganadores. Se bloquea al recibir el primer pago.</p></div>
-              <div className="space-y-2"><label className="text-xs font-bold uppercase">Agregar patrocinador</label><div className="flex gap-2"><input value={sponsorName} onChange={e => setSponsorName(e.target.value)} placeholder="Nombre" className="min-w-0 flex-1 rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] p-3 text-xs outline-none" /><input type="number" min={0} value={sponsorContribution} onChange={e => setSponsorContribution(Number(e.target.value))} className="w-28 rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] p-3 text-xs outline-none" /><button type="button" onClick={handleAddSponsor} className="rounded-full bg-black px-3 text-white" aria-label="Agregar patrocinador"><Plus className="w-4 h-4" /></button></div><input type="url" value={sponsorLink} onChange={e => setSponsorLink(e.target.value)} placeholder="https://sitio-del-patrocinador.com" className="w-full rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] p-3 text-xs outline-none" /></div>
+              <div className="space-y-2"><label className="text-xs font-bold uppercase">Agregar patrocinador</label><div className="flex gap-2"><input value={sponsorName} onChange={e => setSponsorName(sanitizeText(e.target.value))} placeholder="Nombre" className="min-w-0 flex-1 rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] p-3 text-xs outline-none" /><input type="number" min={0} value={sponsorContribution} onChange={e => setSponsorContribution(Number(e.target.value))} className="w-28 rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] p-3 text-xs outline-none" /><button type="button" onClick={handleAddSponsor} className="rounded-full bg-black px-3 text-white" aria-label="Agregar patrocinador"><Plus className="w-4 h-4" /></button></div><input type="url" value={sponsorLink} onChange={e => setSponsorLink(e.target.value)} placeholder="https://sitio-del-patrocinador.com" className="w-full rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] p-3 text-xs outline-none" /></div>
             </div>}
 
             {prizeType !== 'no_prize' && sponsors.length > 0 && <div className="space-y-2">{sponsors.map(s => <div key={s.id} className="flex items-center justify-between rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] px-4 py-2 text-xs"><span><strong>{s.name}</strong> · ${s.contribution.toLocaleString()} MXN</span><button type="button" onClick={() => handleRemoveSponsor(s.id)} aria-label={`Quitar ${s.name}`}><Trash2 className="w-4 h-4" /></button></div>)}</div>}
@@ -784,6 +849,7 @@ export const CreateTournamentWizard: React.FC<CreateTournamentWizardProps> = ({
               <p className={`text-xs font-bold ${prizePercentageTotal === 100 ? 'text-green-700' : 'text-red-600'}`}>Total: {prizePercentageTotal}% {prizePercentageTotal === 100 ? '✓' : '— debe sumar 100%'}</p>
             </div>}
             {prizeType === 'other' && entryFeeType !== 'free' && <div className="rounded-3xl bg-black p-5 text-white"><p className="text-xs font-black">¿Quién recibe el dinero?</p><p className="mt-2 text-xs text-gray-300">Con una bolsa proyectada de ${grossPrizePool.toLocaleString()} MXN: ${organizerCut.toLocaleString()} MXN ({organizerPercentage}%) corresponden al organizador y ${netPrizePool.toLocaleString()} MXN ({100 - organizerPercentage}%) quedan destinados a los ganadores, además del premio externo prometido.</p></div>}
+            </fieldset>
 
             {/* Cálculo de la Bolsa de Premios */}
             {prizeType === 'monetary' && <div className="bg-black text-white p-6 rounded-3xl border border-gray-800 space-y-4 shadow-xs">
@@ -800,7 +866,32 @@ export const CreateTournamentWizard: React.FC<CreateTournamentWizardProps> = ({
               <div className="grid gap-3 text-xs pt-2 border-t border-gray-800 sm:grid-cols-2 lg:grid-cols-3">{prizePercentages.map((percentage, index) => <div key={index} className="bg-gray-900 border border-gray-800 p-3 rounded-2xl text-center"><span className="text-[10px] text-gray-400 block">{index + 1}.{index === 0 ? 'er' : 'º'} Lugar ({percentage}%)</span><span className="text-sm font-black text-white">${Math.round(netPrizePool * percentage / 100).toLocaleString()}</span></div>)}</div>
               <p className="text-[10px] text-gray-400">Proyección con cupo completo. La bolsa real solo contabilizará inscripciones efectivamente pagadas y aportes confirmados.</p>
             </div>}
-            {fundingClientSecret && <div className="rounded-3xl border border-[#E5E7EB] bg-white p-5 shadow-sm"><h3 className="mb-1 text-lg font-black">Paga la bolsa inicial</h3><p className="mb-5 text-xs text-gray-500">El torneo permanecerá como borrador hasta que Stripe confirme el aporte.</p><OrganizerFundingPayment clientSecret={fundingClientSecret} amount={basePrizePool} onPaid={handleFundingPaid} /></div>}
+          </div>
+        )}
+
+        {/* STEP 5: PARTICIPANTES INVITADOS (solo torneos privados) */}
+        {currentStep === 5 && accessType === 'private' && (
+          <div className="space-y-6">
+            <div className="rounded-2xl border border-[#E5E7EB] bg-[#F9FAFB] p-4 text-xs text-gray-600 flex items-start gap-2">
+              <Info className="w-4 h-4 shrink-0 mt-0.5" />
+              Tu torneo es privado. Invita a {participantType === 'team' ? 'los equipos' : 'los usuarios'} que podrán inscribirse — deben aceptar la invitación para ocupar un cupo.
+            </div>
+            <InviteParticipantsStep
+              participantType={participantType}
+              minPlayersPerTeam={minPlayersPerTeam}
+              invited={invitedParticipants}
+              onAdd={p => setInvitedParticipants(current => current.some(x => x.id === p.id) ? current : [...current, p])}
+              onRemove={id => setInvitedParticipants(current => current.filter(p => p.id !== id))}
+              disabled={!!fundingClientSecret}
+            />
+          </div>
+        )}
+
+        {prizeType === 'monetary' && fundingClientSecret && (
+          <div className="rounded-3xl border border-[#E5E7EB] bg-white p-5 shadow-sm">
+            <h3 className="mb-1 text-lg font-black">Paga la bolsa inicial</h3>
+            <p className="mb-5 text-xs text-gray-500">El torneo permanecerá como borrador hasta que Stripe confirme el aporte.</p>
+            <OrganizerFundingPayment clientSecret={fundingClientSecret} amount={basePrizePool} onPaid={handleFundingPaid} />
           </div>
         )}
 
@@ -818,7 +909,7 @@ export const CreateTournamentWizard: React.FC<CreateTournamentWizardProps> = ({
             </button>
           ) : <div />}
 
-          {currentStep < 4 ? (
+          {currentStep < totalSteps ? (
             <button 
               type="button" 
               onClick={handleContinue}
