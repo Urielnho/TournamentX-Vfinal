@@ -4,6 +4,7 @@ import { GAMES_CATALOG, TOURNAMENT_REGIONS, TOURNAMENT_FORMAT_LABELS } from '../
 import { Trophy, CheckCircle2, ArrowRight, ArrowLeft, Gamepad2, Layers, DollarSign, Calendar, Sparkles, Shield, Upload, Globe, MapPin, Tv, Plus, Trash2, AlertCircle, Info, Lock } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { OrganizerFundingPayment } from './OrganizerFundingPayment';
+import { ConfirmDialog } from './ConfirmDialog';
 import { InviteParticipantsStep } from './wizard/InviteParticipantsStep';
 import { createOrganizerPaymentIntent, uploadTournamentBanner, waitForOrganizerFunding, EligibleParticipant, inviteTournamentParticipant } from '../services/supabaseData';
 import { toLocalDateTimeInput } from '../utils/dateInput';
@@ -99,6 +100,8 @@ export const CreateTournamentWizard: React.FC<CreateTournamentWizardProps> = ({
   const selectedModeConfig = selectedGame.modes.find(m => m.label === gameMode) ?? selectedGame.modes[0];
   const todayMinimum = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(new Date().getDate()).padStart(2, '0')}T00:00`;
   const registrationDeadlineMinimum = toLocalDateTimeInput(new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString());
+  const registrationWindowTooShort = Boolean(registrationDeadline) && new Date(registrationDeadline).getTime() < Date.now() + 2 * 60 * 60 * 1000;
+  const [confirmShortRegistrationWindow, setConfirmShortRegistrationWindow] = useState(false);
   const forcedOnline = hasStream && streamUrl.trim().length > 0;
   const effectiveLocationType: 'online' | 'onsite' = forcedOnline ? 'online' : locationType;
 
@@ -169,7 +172,6 @@ export const CreateTournamentWizard: React.FC<CreateTournamentWizardProps> = ({
     else if (step === 2 && forcedOnline && isHybridVenue && (!venueName.trim() || !venueAddress.trim())) error = 'Completa el recinto y la dirección del evento híbrido, o desactiva esa opción.';
     else if (step === 3 && (!startDate || !endDate || !registrationDeadline)) error = 'Completa las fechas del torneo y de inscripción.';
     else if (step === 3 && [startDate, endDate, registrationDeadline].some(value => value < todayMinimum)) error = 'No puedes seleccionar días anteriores a hoy.';
-    else if (step === 3 && registrationDeadline && new Date(registrationDeadline).getTime() < Date.now() + 2 * 60 * 60 * 1000) error = 'El periodo de inscripciones es muy corto: deja al menos 2 horas entre este momento y el cierre de inscripciones.';
     else if (step === 3 && new Date(endDate) < new Date(startDate)) error = 'La fecha de finalización no puede ser anterior al inicio.';
     else if (step === 3 && new Date(registrationDeadline) > new Date(startDate)) error = 'El cierre de inscripciones no puede ser posterior al inicio.';
     else if (step === 3 && maxParticipants < 2) error = 'El torneo necesita al menos dos participantes.';
@@ -184,7 +186,9 @@ export const CreateTournamentWizard: React.FC<CreateTournamentWizardProps> = ({
   };
 
   const handleContinue = () => {
-    if (validateStep(currentStep)) setCurrentStep(prev => prev + 1);
+    if (!validateStep(currentStep)) return;
+    if (currentStep === 3 && registrationWindowTooShort) { setConfirmShortRegistrationWindow(true); return; }
+    setCurrentStep(prev => prev + 1);
   };
 
   const sendPendingInvitations = async (tournamentId: string) => {
@@ -657,7 +661,7 @@ export const CreateTournamentWizard: React.FC<CreateTournamentWizardProps> = ({
                 <input
                   type="datetime-local"
                   value={registrationDeadline}
-                  min={registrationDeadlineMinimum}
+                  min={todayMinimum}
                   max={startDate || undefined}
                   onChange={(e) => setRegistrationDeadline(e.target.value)}
                   className="w-full bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl p-3 text-xs text-black outline-none"
@@ -931,6 +935,14 @@ export const CreateTournamentWizard: React.FC<CreateTournamentWizardProps> = ({
           )}
         </div>}
       </div>
+      <ConfirmDialog
+        open={confirmShortRegistrationWindow}
+        title="Periodo de inscripciones muy corto"
+        message="Dejaste menos de 2 horas entre este momento y el cierre de inscripciones. ¿Quieres continuar de todas formas?"
+        confirmLabel="Sí, continuar"
+        onCancel={() => setConfirmShortRegistrationWindow(false)}
+        onConfirm={() => { setConfirmShortRegistrationWindow(false); setCurrentStep(prev => prev + 1); }}
+      />
     </div>
   );
 };
