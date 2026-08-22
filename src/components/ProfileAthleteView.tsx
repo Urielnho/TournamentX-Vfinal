@@ -1,16 +1,18 @@
 import React, { useState } from 'react';
-import { UserProfile, ViewMode } from '../types';
-import { Trophy, Award, TrendingUp, DollarSign, Edit3, Shield, CheckCircle2, Gamepad2, Sparkles, X, User } from 'lucide-react';
+import { Tournament, UserProfile, ViewMode } from '../types';
+import { Trophy, Award, DollarSign, Edit3, Shield, CheckCircle2, Gamepad2, Sparkles, X, User } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 interface ProfileAthleteViewProps {
   user: UserProfile;
+  tournaments: Tournament[];
   onUpdateUser: (updated: UserProfile) => void;
   onNavigate: (view: ViewMode, tournamentId?: string) => void;
 }
 
 export const ProfileAthleteView: React.FC<ProfileAthleteViewProps> = ({
   user,
+  tournaments,
   onUpdateUser,
   onNavigate
 }) => {
@@ -18,7 +20,7 @@ export const ProfileAthleteView: React.FC<ProfileAthleteViewProps> = ({
   const [showEditModal, setShowEditModal] = useState(false);
   const [editName, setEditName] = useState(user.name);
   const [editTag, setEditTag] = useState(user.gamerTag);
-  const [editEmail, setEditEmail] = useState(user.email);
+  const editEmail = user.email;
 
   const handleClaimPrize = (itemIndex: number) => {
     const item = user.financialHistory[itemIndex];
@@ -118,7 +120,7 @@ export const ProfileAthleteView: React.FC<ProfileAthleteViewProps> = ({
       </div>
 
       {/* Stats Ribbon */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-white p-5 rounded-3xl border border-[#E5E7EB] shadow-xs">
           <div className="flex justify-between items-center text-gray-500 mb-1">
             <span className="text-[10px] uppercase font-bold">Total Ganado</span>
@@ -129,18 +131,10 @@ export const ProfileAthleteView: React.FC<ProfileAthleteViewProps> = ({
 
         <div className="bg-white p-5 rounded-3xl border border-[#E5E7EB] shadow-xs">
           <div className="flex justify-between items-center text-gray-500 mb-1">
-            <span className="text-[10px] uppercase font-bold">Por Reclamar</span>
+            <span className="text-[10px] uppercase font-bold">Torneos Inscritos</span>
             <Trophy className="w-4 h-4 text-black" />
           </div>
-          <p className="text-xl sm:text-2xl font-black text-black">${user.pendingAmount.toLocaleString('es-MX')} MXN</p>
-        </div>
-
-        <div className="bg-white p-5 rounded-3xl border border-[#E5E7EB] shadow-xs">
-          <div className="flex justify-between items-center text-gray-500 mb-1">
-            <span className="text-[10px] uppercase font-bold">Win Rate</span>
-            <TrendingUp className="w-4 h-4 text-black" />
-          </div>
-          <p className="text-xl sm:text-2xl font-black text-black">{user.stats.winRate}%</p>
+          <p className="text-xl sm:text-2xl font-black text-black">{tournaments.filter(t => t.isUserRegistered).length}</p>
         </div>
 
         <div className="bg-white p-5 rounded-3xl border border-[#E5E7EB] shadow-xs">
@@ -357,12 +351,14 @@ export const ProfileAthleteView: React.FC<ProfileAthleteViewProps> = ({
 
               <div>
                 <label className="font-bold text-gray-600 uppercase block mb-1">Correo Electrónico</label>
-                <input 
-                  type="email" 
+                <input
+                  type="email"
                   value={editEmail}
-                  onChange={(e) => setEditEmail(e.target.value)}
-                  className="w-full bg-[#F9FAFB] border border-[#E5E7EB] focus:border-black rounded-xl px-3.5 py-2.5 text-black outline-none"
+                  disabled
+                  readOnly
+                  className="w-full bg-[#F3F4F6] border border-[#E5E7EB] rounded-xl px-3.5 py-2.5 text-gray-500 outline-none cursor-not-allowed"
                 />
+                <p className="mt-1 text-[10px] text-gray-400">Vinculado a tu cuenta de Google, no se puede editar aquí.</p>
               </div>
 
               <div className="flex gap-3 pt-2">

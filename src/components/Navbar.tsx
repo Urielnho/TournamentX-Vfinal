@@ -1,9 +1,8 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import type { User as SupabaseUser } from '@supabase/supabase-js';
-import { Tournament, ViewMode, UserProfile } from '../types';
-import { Bell, ChevronDown, LogIn, LogOut, Menu, Search, ShieldCheck, User, X } from 'lucide-react';
+import { ViewMode, UserProfile } from '../types';
+import { Bell, ChevronDown, LogIn, LogOut, Menu, ShieldCheck, User, X } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import { tournamentSearchScore } from '../utils/smartSearch';
 
 interface AppNotification { id: string; title: string; body: string; event_type: string; read_at: string | null; created_at: string; }
 
@@ -14,21 +13,15 @@ interface NavbarProps {
   authUser: SupabaseUser | null;
   onSignIn: () => void;
   onSignOut: () => Promise<void>;
-  searchQuery: string;
-  onSearchQueryChange: (query: string) => void;
-  onSearchSubmit: () => void;
-  tournaments: Tournament[];
 }
 const links: { label: string; view: ViewMode }[] = [{ label: 'Inicio', view: 'home' }, { label: 'Equipos', view: 'teams' }, { label: 'Torneos', view: 'tournaments' }, { label: 'Partidos', view: 'matches' }];
 
-export const Navbar: React.FC<NavbarProps> = ({ currentView, onNavigate, user, authUser, onSignIn, onSignOut, searchQuery, onSearchQueryChange, onSearchSubmit, tournaments }) => {
+export const Navbar: React.FC<NavbarProps> = ({ currentView, onNavigate, user, authUser, onSignIn, onSignOut }) => {
   const [profileOpen, setProfileOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [notificationsLoading, setNotificationsLoading] = useState(false);
-  const [searchFocused,setSearchFocused]=useState(false);
-  const suggestions=useMemo(()=>searchQuery.trim().length<2?[]:tournaments.map(t=>({t,score:tournamentSearchScore(t,searchQuery)})).filter(item=>item.score>0).sort((a,b)=>b.score-a.score).slice(0,5),[tournaments,searchQuery]);
   const unreadCount = notifications.filter(item => !item.read_at).length;
 
   const loadNotifications = async () => {
@@ -60,8 +53,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentView, onNavigate, user, a
     <div className="mx-auto flex h-16 max-w-[1440px] items-center gap-5 px-4 md:px-8">
       <button onClick={() => go('home')} className="shrink-0 text-xl font-black tracking-tight">TOURNAMENTX</button>
       <div className="hidden items-center gap-1 md:flex">{links.map(link => <button key={link.view} onClick={() => go(link.view)} className={`px-4 py-2 text-sm font-bold transition ${isActive(link.view) ? 'text-black' : 'text-gray-500 hover:text-black'}`}>{link.label}</button>)}</div>
-      <div className="relative ml-auto hidden max-w-sm flex-1 lg:block"><form onSubmit={event => { event.preventDefault();setSearchFocused(false);onSearchSubmit(); }} className="flex items-center gap-2 rounded-xl border border-[#E5E7EB] bg-[#F8F9FA] px-3 py-2 focus-within:border-black"><Search className="h-4 w-4 text-gray-400" /><input aria-label="Buscar torneos" value={searchQuery} onFocus={()=>setSearchFocused(true)} onBlur={()=>window.setTimeout(()=>setSearchFocused(false),150)} onChange={event => onSearchQueryChange(event.target.value)} placeholder="Buscar torneos, juegos, modos u organizadores" className="w-full bg-transparent text-xs outline-none placeholder:text-gray-400" />{searchQuery&&<button type="button" aria-label="Limpiar búsqueda" onClick={()=>onSearchQueryChange('')}><X className="h-3.5 w-3.5 text-gray-400"/></button>}<button type="submit" className="sr-only">Buscar</button></form>{searchFocused&&searchQuery.trim().length>=2&&<div className="absolute left-0 right-0 top-full mt-2 overflow-hidden rounded-2xl border bg-white p-2 shadow-2xl">{suggestions.length?suggestions.map(({t})=><button type="button" key={t.id} onMouseDown={event=>event.preventDefault()} onClick={()=>{setSearchFocused(false);onNavigate('tournament-detail',t.id);}} className="flex w-full items-center gap-3 rounded-xl p-2 text-left hover:bg-gray-50"><img src={t.bannerUrl} alt="" className="h-10 w-12 rounded-lg object-cover"/><div className="min-w-0"><p className="truncate text-xs font-black">{t.title}</p><p className="truncate text-[10px] text-gray-500">{t.game} · {t.gameMode} · {t.organizer.name}</p></div></button>):<p className="p-4 text-center text-xs text-gray-500">No encontramos coincidencias.</p>}<button type="submit" onMouseDown={event=>event.preventDefault()} onClick={()=>{setSearchFocused(false);onSearchSubmit();}} className="mt-1 w-full rounded-xl bg-black p-2 text-xs font-bold text-white">Ver todos los resultados</button></div>}</div>
-      <div className="ml-auto flex items-center gap-2 lg:ml-0">
+      <div className="ml-auto flex items-center gap-2">
         <div className="relative"><button aria-label={`Notificaciones${unreadCount?` (${unreadCount} sin leer)`:''}`} onClick={() => { setNotificationsOpen(!notificationsOpen); setProfileOpen(false); if(!notificationsOpen) void loadNotifications(); }} className="relative rounded-xl border border-[#E5E7EB] bg-[#F8F9FA] p-2.5 hover:border-black"><Bell className="h-4 w-4" />{unreadCount>0&&<span className="absolute -right-1 -top-1 min-w-4 rounded-full bg-black px-1 text-center text-[9px] font-black leading-4 text-white">{unreadCount>9?'9+':unreadCount}</span>}</button>
           {notificationsOpen && <div className="absolute right-0 mt-3 w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-[#E5E7EB] bg-white shadow-2xl"><div className="flex items-center justify-between border-b p-4"><p className="text-sm font-black">Notificaciones</p>{unreadCount>0&&<button onClick={()=>void markAllRead()} className="text-[11px] font-bold text-gray-500 hover:text-black">Marcar todas como leídas</button>}</div><div className="max-h-96 overflow-y-auto p-2">{notificationsLoading?<p className="p-5 text-center text-xs text-gray-500">Cargando…</p>:!authUser?<button onClick={onSignIn} className="w-full rounded-xl bg-black p-3 text-xs font-bold text-white">Inicia sesión para ver tus avisos</button>:notifications.length===0?<p className="rounded-xl bg-[#F8F9FA] p-4 text-center text-xs text-gray-500">No tienes notificaciones.</p>:notifications.map(item=><button key={item.id} onClick={()=>void openNotification(item)} className={`mb-1 w-full rounded-xl p-3 text-left hover:bg-gray-100 ${item.read_at?'bg-white':'bg-gray-50'}`}><div className="flex gap-2"><span className={`mt-1 h-2 w-2 shrink-0 rounded-full ${item.read_at?'bg-transparent':'bg-black'}`}/><div><p className="text-xs font-black">{item.title}</p><p className="mt-1 line-clamp-2 text-[11px] leading-4 text-gray-500">{item.body}</p><p className="mt-1.5 text-[10px] text-gray-400">{new Date(item.created_at).toLocaleString('es-MX',{dateStyle:'short',timeStyle:'short'})}</p></div></div></button>)}</div></div>}
         </div>

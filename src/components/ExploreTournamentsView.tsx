@@ -31,7 +31,6 @@ export const ExploreTournamentsView: React.FC<ExploreTournamentsViewProps> = ({
     { id: 'League of Legends', label: 'LoL' },
     { id: 'Rocket League', label: 'Rocket League' },
     { id: 'Fútbol', label: 'Fútbol 5' },
-    { id: 'Pádel', label: 'Pádel' },
   ];
 
   const filteredTournaments = useMemo(() => {
